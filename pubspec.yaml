@@ -1,0 +1,45 @@
+name: maintenance_app
+description: Offline-First Mobile Maintenance Management Application.
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  
+  # State Management
+  provider: ^6.1.1
+  
+  # Firebase & Firestore (Offline Sync)
+  firebase_core: ^2.24.2
+  cloud_firestore: ^4.14.0
+  
+  # Isar Database (Offline Storage)
+  isar: ^3.1.0
+  isar_flutter_libs: ^3.1.0
+  path_provider: ^2.1.2
+  
+  # Network & Utilities
+  http: ^1.2.0
+  intl: ^0.19.0
+  reorderable_grid_view: ^2.2.8
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+    
+  # Code Generation for Isar Models
+  build_runner: ^2.4.8
+  isar_generator: ^3.1.0
+
+  image_picker: ^1.0.7
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - lib/assets/
