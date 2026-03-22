@@ -16,6 +16,7 @@ class MainNavigationScreen extends StatefulWidget {
 class _MainNavigationScreenState extends State<MainNavigationScreen> {
   int _currentIndex = 0;
 
+  // القائمة تبقى كما هي لكن سيتم استهلاكها داخل IndexedStack
   final List<Widget> _screens = [
     const IntakeTab(),
     const WorkspaceTab(),
@@ -27,7 +28,13 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: SafeArea(child: _screens[_currentIndex]),
+      // التعديل الجوهري هنا: حفظ حالة الشاشات
+      body: SafeArea(
+        child: IndexedStack(
+          index: _currentIndex,
+          children: _screens,
+        ),
+      ),
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
           boxShadow: [
@@ -39,8 +46,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
           onTap: (index) => setState(() => _currentIndex = index),
           type: BottomNavigationBarType.fixed,
           backgroundColor: AppTheme.albaikPureWhite,
-          selectedItemColor: AppTheme.albaikRichRed, // اللون المختار أحمر غني
-          unselectedItemColor: AppTheme.albaikDeepNavy.withOpacity(0.4), // غير المختار كحلي باهت
+          selectedItemColor: AppTheme.albaikRichRed,
+          unselectedItemColor: AppTheme.albaikDeepNavy.withOpacity(0.4),
           selectedLabelStyle: const TextStyle(fontWeight: FontWeight.bold),
           elevation: 0,
           items: const [

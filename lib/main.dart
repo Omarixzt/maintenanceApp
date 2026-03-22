@@ -43,9 +43,9 @@ class MobileMaintenanceApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'FixIT Pro',
+      title: 'Albaik Maintenance',
       debugShowCheckedModeBanner: false,
-      theme: AppTheme.lightTheme, // <-- تم ربط التطبيق بالثيم المركزي هنا بدلاً من الكود الطويل
+      theme: AppTheme.lightTheme,
       home: const MainNavigationScreen(),
     );
   }

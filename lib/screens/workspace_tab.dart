@@ -1,143 +1,511 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:intl/intl.dart';
+import 'package:image_picker/image_picker.dart';
 import '../providers/app_provider.dart';
 import '../models/app_models.dart';
 import '../theme/custom_app_bar.dart';
 import '../theme/app_theme.dart';
 
-class WorkspaceTab extends StatelessWidget {
+class WorkspaceTab extends StatefulWidget {
   const WorkspaceTab({Key? key}) : super(key: key);
 
-  void _showTicketDetails(BuildContext context, AppProvider provider, MaintenanceTicket ticket) {
-    LocalPart? selectedPart; 
+  @override
+  State<WorkspaceTab> createState() => _WorkspaceTabState();
+}
 
+class _WorkspaceTabState extends State<WorkspaceTab> {
+  String _searchQuery = ''; 
+
+  static final Map<String, Map<String, dynamic>> _statusConfig = {
+    'Waiting': {'label': 'قيد الانتظار', 'color': Colors.orange.shade700},
+    'In Progress': {'label': 'جاري العمل', 'color': Colors.blue.shade700},
+    'Waiting for Parts': {'label': 'بانتظار القطع', 'color': Colors.deepPurple.shade600},
+    'Ready': {'label': 'جاهز للتسليم', 'color': Colors.green.shade600},
+    'Delivered': {'label': 'تم التسليم', 'color': Colors.teal.shade800},
+  };
+
+  void _unfocusAll() => FocusManager.instance.primaryFocus?.unfocus();
+
+  void _viewFullImage(BuildContext context, String imagePath) {
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.all(10),
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            InteractiveViewer(
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(20),
+                child: Image.file(File(imagePath), fit: BoxFit.contain),
+              ),
+            ),
+            Positioned(
+              top: 10,
+              right: 10,
+              child: CircleAvatar(
+                backgroundColor: Colors.black54,
+                child: IconButton(
+                  icon: const Icon(Icons.close, color: Colors.white),
+                  onPressed: () => Navigator.pop(ctx),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // نافذة طلب الحسابات النهائية قبل الأرشفة
+  Future<void> _promptForArchiveDetails(BuildContext context, AppProvider provider, MaintenanceTicket ticket, String newStatus) async {
+    final finalCostCtrl = TextEditingController(text: ticket.expectedCost.toString());
+    final partsCostCtrl = TextEditingController(text: '0');
+    final formKey = GlobalKey<FormState>();
+
+    final bool? confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Row(
+          children: [
+            Icon(Icons.monetization_on, color: Colors.green, size: 28),
+            SizedBox(width: 10),
+            Text('تأكيد الحساب والأرشفة', style: TextStyle(color: AppTheme.albaikDeepNavy, fontWeight: FontWeight.bold, fontSize: 16)),
+          ],
+        ),
+        content: Form(
+          key: formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('يرجى إدخال الحساب النهائي لحساب الأرباح قبل النقل للأرشيف:', style: TextStyle(fontSize: 13, color: Colors.grey)),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: finalCostCtrl,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: 'المبلغ النهائي من العميل', prefixIcon: Icon(Icons.attach_money)),
+                validator: (v) => v!.isEmpty ? 'مطلوب' : null,
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: partsCostCtrl,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: 'تكلفة القطع (إن وجدت)', prefixIcon: Icon(Icons.money_off)),
+                validator: (v) => v!.isEmpty ? 'مطلوب' : null,
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('إلغاء', style: TextStyle(color: Colors.grey))),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.green.shade700),
+            onPressed: () {
+              if (formKey.currentState!.validate()) {
+                Navigator.pop(ctx, true);
+              }
+            },
+            child: const Text('تأكيد'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      double finalC = double.tryParse(finalCostCtrl.text) ?? 0.0;
+      double partsC = double.tryParse(partsCostCtrl.text) ?? 0.0;
+      
+      ticket.finalCost = finalC;
+      ticket.netProfit = finalC - partsC; // حساب صافي الربح
+      
+      provider.updateTicketStatus(ticket, newStatus, archive: true);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم أرشفة الجهاز وحفظ الأرباح بنجاح')));
+      }
+    }
+  }
+
+  void _showTicketDetails(BuildContext context, AppProvider provider, MaintenanceTicket ticket) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      backgroundColor: Colors.transparent,
       builder: (ctx) {
-        return StatefulBuilder(
-          builder: (BuildContext context, StateSetter setModalState) {
-            return Container(
-              padding: EdgeInsets.only(
-                bottom: MediaQuery.of(context).viewInsets.bottom,
-                left: 20, right: 20, top: 20
+        String formattedDate = ticket.receivedDate;
+        try {
+          formattedDate = DateFormat('yyyy-MM-dd | hh:mm a').format(DateTime.parse(ticket.receivedDate));
+        } catch (_) {}
+
+        return Container(
+          decoration: const BoxDecoration(
+            color: AppTheme.albaikPureWhite,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
+          ),
+          height: MediaQuery.of(context).size.height * 0.85,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Container(
+                decoration: const BoxDecoration(
+                  color: AppTheme.albaikDeepNavy,
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
+                ),
+                height: 12,
               ),
-              height: MediaQuery.of(context).size.height * 0.7,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
+              Container(color: AppTheme.albaikRichRed, height: 6),
+              const SizedBox(height: 16),
+              const Text(
+                'تفاصيل الجهاز',
+                style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppTheme.albaikDeepNavy),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 20),
+
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
-                  const Text('تفاصيل الصيانة', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppTheme.albaikDeepNavy), textAlign: TextAlign.center),
-                  const Divider(height: 32),
-                  
-                  Text('العميل: ${ticket.customerName} (${ticket.phoneNumber})', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-                  const SizedBox(height: 8),
-                  Text('الجهاز: ${ticket.deviceType} ${ticket.deviceModel}', style: const TextStyle(fontSize: 16)),
-                  const SizedBox(height: 8),
-                  Text('العطل: ${ticket.faultDescription}', style: const TextStyle(fontSize: 16, color: AppTheme.albaikRichRed)),
-                  const SizedBox(height: 8),
-                  Text('التكلفة المتوقعة: ${ticket.expectedCost}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                  
-                  const Divider(height: 32),
-                  const Text('إدارة القطع المستخدمة (تؤثر على صافي الربح)', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.albaikDeepNavy)),
-                  const SizedBox(height: 12),
-                  
-                  DropdownButtonFormField<LocalPart>(
-                    decoration: const InputDecoration(labelText: 'اختر القطعة لخصمها من المخزون'),
-                    value: selectedPart,
-                    items: provider.inventory.map((part) {
-                      return DropdownMenuItem<LocalPart>(
-                        value: part,
-                        child: Text('${part.partName} (المتوفر: ${part.quantity})'),
-                      );
-                    }).toList(),
-                    onChanged: (val) {
-                      setModalState(() => selectedPart = val);
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                  
-                  ElevatedButton.icon(
-                    icon: const Icon(Icons.inventory_2),
-                    label: const Text('خصم القطعة وحساب الربح'),
-                    onPressed: selectedPart == null || selectedPart!.quantity <= 0 ? null : () async {
-                      // هنا نستخدم الدالة التي تخصم القطعة وتحسب صافي ربح هذه التذكرة
-                      bool success = await provider.usePartForTicket(ticket, selectedPart!);
-                      Navigator.pop(ctx);
-                      if (success) {
-                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم خصم القطعة وحساب الربح بنجاح')));
-                      } else {
-                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('فشلت العملية، تأكد من توفر القطعة')));
-                      }
-                    },
-                  ),
+                  _buildImagePreview(context, ticket.imagePath, 'قبل الإصلاح'),
+                  _buildImagePreview(context, ticket.imagePathAfter, 'بعد الإصلاح'),
                 ],
               ),
-            );
-          }
+
+              const SizedBox(height: 16),
+              const Divider(height: 1),
+
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+                  child: Column(
+                    children: [
+                      _buildDetailRow(Icons.person, 'العميل', ticket.customerName),
+                      _buildDetailRow(Icons.phone, 'رقم الهاتف', ticket.phoneNumber),
+                      _buildDetailRow(Icons.smartphone, 'الجهاز', '${ticket.deviceType} - ${ticket.deviceModel}'),
+                      if (ticket.imei.isNotEmpty) _buildDetailRow(Icons.qr_code, 'IMEI', ticket.imei),
+                      _buildDetailRow(Icons.build_circle, 'العطل', ticket.faultDescription, valueColor: AppTheme.albaikRichRed),
+                      _buildDetailRow(Icons.attach_money, 'التكلفة المتوقعة', '${ticket.expectedCost}', isBold: true),
+                      if (ticket.finalCost > 0)
+                        _buildDetailRow(Icons.monetization_on, 'التكلفة النهائية', '${ticket.finalCost}', isBold: true, valueColor: Colors.green.shade700),
+                      _buildDetailRow(Icons.calendar_today, 'تاريخ الاستلام', formattedDate),
+                      if (ticket.expectedDeliveryDate != null)
+                        _buildDetailRow(Icons.event_available, 'موعد التسليم المتوقع', DateFormat('yyyy-MM-dd').format(DateTime.parse(ticket.expectedDeliveryDate!)), valueColor: Colors.orange.shade800),
+                    ],
+                  ),
+                ),
+              ),
+
+              Padding(
+                padding: const EdgeInsets.all(20.0),
+                child: OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppTheme.albaikRichRed,
+                    side: const BorderSide(color: AppTheme.albaikRichRed, width: 2),
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                  ),
+                  icon: const Icon(Icons.archive),
+                  label: const Text('نقل الجهاز إلى الأرشيف'),
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    _promptForArchiveDetails(context, provider, ticket, ticket.status);
+                  },
+                ),
+              ),
+            ],
+          ),
         );
       },
     );
   }
 
+  Widget _buildImagePreview(BuildContext context, String? path, String label) {
+    return Column(
+      children: [
+        Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.albaikDeepNavy)),
+        const SizedBox(height: 8),
+        GestureDetector(
+          onTap: path != null ? () => _viewFullImage(context, path) : null,
+          child: Container(
+            width: 130,
+            height: 130,
+            decoration: BoxDecoration(
+              color: Colors.grey.shade100,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: path != null ? AppTheme.albaikRichRed : Colors.grey.shade300, width: 2),
+              boxShadow: [
+                if (path != null)
+                  BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 8, offset: const Offset(0, 4)),
+              ],
+            ),
+            child: path != null
+                ? ClipRRect(borderRadius: BorderRadius.circular(18), child: Image.file(File(path), fit: BoxFit.cover))
+                : const Icon(Icons.image_not_supported, color: Colors.grey, size: 40),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDetailRow(IconData icon, String label, String value, {Color? valueColor, bool isBold = false}) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16.0),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: AppTheme.albaikDeepNavy.withOpacity(0.6), size: 24),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label, style: TextStyle(color: AppTheme.albaikDeepNavy.withOpacity(0.6), fontSize: 12)),
+                const SizedBox(height: 4),
+                Text(
+                  value,
+                  style: TextStyle(
+                    color: valueColor ?? AppTheme.albaikDeepNavy,
+                    fontSize: 16,
+                    fontWeight: isBold ? FontWeight.bold : FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _handleStatusChange(BuildContext context, AppProvider provider, MaintenanceTicket ticket, String newStatus) async {
+    if (newStatus == ticket.status) return;
+
+    if (newStatus == 'Ready') {
+      final bool? confirmPhoto = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Text('توثيق الجاهزية'),
+          content: const Text('هل ترغب في التقاط صورة للجهاز بعد الإصلاح لتوثيق الحالة النهائية؟'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('تخطي')),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: AppTheme.albaikDeepNavy),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('فتح الكاميرا'),
+            ),
+          ],
+        ),
+      );
+
+      if (confirmPhoto == true) {
+        final XFile? photo = await ImagePicker().pickImage(source: ImageSource.camera);
+        if (photo != null) {
+          ticket.imagePathAfter = photo.path;
+        }
+      }
+      provider.updateTicketStatus(ticket, newStatus, archive: false);
+    } 
+    else if (newStatus == 'Delivered') {
+      // إظهار نافذة إدخال الحسابات وتأكيد التسليم
+      await _promptForArchiveDetails(context, provider, ticket, newStatus);
+    } 
+    else {
+      provider.updateTicketStatus(ticket, newStatus, archive: false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final provider = Provider.of<AppProvider>(context);
-    final activeTickets = provider.tickets.where((t) => t.status != 'Delivered').toList();
+    
+    final filteredTickets = provider.tickets.where((t) {
+      final query = _searchQuery.toLowerCase();
+      return t.customerName.toLowerCase().contains(query) ||
+             t.phoneNumber.contains(query) ||
+             t.deviceType.toLowerCase().contains(query) ||
+             t.deviceModel.toLowerCase().contains(query) ||
+             t.expectedCost.toString().contains(query);
+    }).toList();
 
     return Scaffold(
       appBar: const CustomAppBar(title: 'ورشة الصيانة'),
-      body: activeTickets.isEmpty 
-        ? const Center(child: Text('لا توجد أجهزة في الورشة', style: TextStyle(color: AppTheme.albaikDeepNavy, fontSize: 16, fontWeight: FontWeight.bold)))
-        : ListView.builder(
-            padding: const EdgeInsets.all(12.0),
-            itemCount: activeTickets.length,
-            itemBuilder: (ctx, i) {
-              final ticket = activeTickets[i];
-              return Card(
-                margin: const EdgeInsets.only(bottom: 12),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: Colors.grey.shade200)),
-                elevation: 0,
-                color: AppTheme.albaikPureWhite,
-                child: ListTile(
-                  contentPadding: const EdgeInsets.all(16),
-                  title: Text('${ticket.deviceModel} - ${ticket.customerName}', style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.albaikDeepNavy, fontSize: 16)),
-                  subtitle: Padding(
-                    padding: const EdgeInsets.only(top: 8.0),
-                    child: Text('العطل: ${ticket.faultDescription}\nالحالة: ${ticket.status}', style: TextStyle(color: AppTheme.albaikDeepNavy.withOpacity(0.7))),
-                  ),
-                  isThreeLine: true,
-                  trailing: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    decoration: BoxDecoration(
-                      color: AppTheme.albaikDeepNavy.withOpacity(0.05),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: DropdownButton<String>(
-                      value: ticket.status,
-                      underline: const SizedBox(),
-                      icon: const Icon(Icons.arrow_drop_down, color: AppTheme.albaikDeepNavy),
-                      items: ['Waiting', 'In Progress', 'Waiting for Parts', 'Ready', 'Delivered']
-                          .map((s) => DropdownMenuItem(value: s, child: Text(s, style: TextStyle(
-                            color: s == 'Delivered' ? Colors.green.shade700 : AppTheme.albaikDeepNavy,
-                            fontWeight: s == 'Delivered' ? FontWeight.bold : FontWeight.w600
-                          )))).toList(),
-                      onChanged: (newStatus) {
-                        if (newStatus != null) {
-                          provider.updateTicketStatus(ticket, newStatus);
-                          if (newStatus == 'Delivered') {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('تم التسليم ومزامنة البيانات مالياً مع POS'))
-                            );
-                          }
-                        }
+      body: GestureDetector(
+        onTap: _unfocusAll,
+        behavior: HitTestBehavior.opaque,
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: TextField(
+                decoration: InputDecoration(
+                  hintText: 'ابحث بالاسم، الرقم، الجهاز، أو التكلفة...',
+                  prefixIcon: const Icon(Icons.search, color: AppTheme.albaikDeepNavy),
+                  suffixIcon: _searchQuery.isNotEmpty 
+                      ? IconButton(icon: const Icon(Icons.clear), onPressed: () => setState(() => _searchQuery = ''))
+                      : null,
+                  filled: true,
+                  fillColor: Colors.grey.shade100,
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide.none),
+                ),
+                onChanged: (val) => setState(() => _searchQuery = val),
+              ),
+            ),
+
+            Expanded(
+              child: filteredTickets.isEmpty
+                  ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.search_off_outlined, size: 80, color: AppTheme.albaikDeepNavy.withOpacity(0.1)),
+                          const SizedBox(height: 16),
+                          Text(
+                            _searchQuery.isEmpty ? 'الورشة فارغة حالياً' : 'لا توجد نتائج مطابقة لبحثك',
+                            style: TextStyle(color: AppTheme.albaikDeepNavy.withOpacity(0.5), fontSize: 16, fontWeight: FontWeight.bold),
+                          ),
+                        ],
+                      ),
+                    )
+                  : ListView.builder(
+                      padding: const EdgeInsets.all(16.0),
+                      itemCount: filteredTickets.length,
+                      itemBuilder: (ctx, i) {
+                        final ticket = filteredTickets[i];
+                        final statusInfo = _statusConfig[ticket.status] ?? _statusConfig['Waiting']!;
+
+                        return Card(
+                          elevation: 0,
+                          margin: const EdgeInsets.only(bottom: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20),
+                            side: BorderSide(color: AppTheme.albaikDeepNavy.withOpacity(0.1), width: 1.5),
+                          ),
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(20),
+                            onTap: () => _showTicketDetails(context, provider, ticket),
+                            child: Padding(
+                              padding: const EdgeInsets.all(16.0),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Text(
+                                        ticket.customerName,
+                                        style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.albaikDeepNavy, fontSize: 18),
+                                      ),
+                                      _buildStatusBadge(context, ticket, statusInfo, provider),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 8),
+                                  
+                                  Row(
+                                    children: [
+                                      const Icon(Icons.smartphone, size: 16, color: AppTheme.albaikRichRed),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        '${ticket.deviceType} ${ticket.deviceModel}',
+                                        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 12),
+
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Expanded(
+                                        child: Row(
+                                          children: [
+                                            Icon(Icons.build_circle_outlined, size: 14, color: AppTheme.albaikDeepNavy.withOpacity(0.5)),
+                                            const SizedBox(width: 6),
+                                            Flexible(
+                                              child: Text(
+                                                ticket.faultDescription,
+                                                style: TextStyle(color: AppTheme.albaikDeepNavy.withOpacity(0.7), fontSize: 13),
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                        decoration: BoxDecoration(
+                                          color: Colors.green.shade50,
+                                          borderRadius: BorderRadius.circular(8),
+                                          border: Border.all(color: Colors.green.shade100),
+                                        ),
+                                        child: Text(
+                                          '${ticket.expectedCost} د.أ',
+                                          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.green.shade700, fontSize: 14),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  
+                                  if (ticket.expectedDeliveryDate != null) ...[
+                                    const SizedBox(height: 12),
+                                    Row(
+                                      children: [
+                                        Icon(Icons.access_time_filled, size: 14, color: Colors.orange.shade700),
+                                        const SizedBox(width: 6),
+                                        Text(
+                                          'التسليم المتوقع: ${DateFormat('yyyy-MM-dd').format(DateTime.parse(ticket.expectedDeliveryDate!))}',
+                                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.orange.shade800),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                          ),
+                        );
                       },
                     ),
-                  ),
-                  onTap: () => _showTicketDetails(context, provider, ticket),
-                ),
-              );
-            },
-          ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStatusBadge(BuildContext context, MaintenanceTicket ticket, Map<String, dynamic> statusInfo, AppProvider provider) {
+    return PopupMenuButton<String>(
+      onSelected: (val) => _handleStatusChange(context, provider, ticket, val),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+      itemBuilder: (ctx) => _statusConfig.keys.map((k) => PopupMenuItem(
+        value: k, 
+        child: Row(
+          children: [
+            Icon(Icons.circle, color: _statusConfig[k]!['color'], size: 12),
+            const SizedBox(width: 10),
+            Text(_statusConfig[k]!['label'], style: const TextStyle(fontWeight: FontWeight.w600)),
+          ],
+        )
+      )).toList(),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: statusInfo['color'].withOpacity(0.1),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: statusInfo['color'].withOpacity(0.2)),
+        ),
+        child: Row(
+          children: [
+            Text(
+              statusInfo['label'],
+              style: TextStyle(color: statusInfo['color'], fontWeight: FontWeight.bold, fontSize: 12),
+            ),
+            Icon(Icons.arrow_drop_down, color: statusInfo['color'], size: 18),
+          ],
+        ),
+      ),
     );
   }
 }

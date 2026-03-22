@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'app_animations.dart'; // تأكد من استيراد ملف الحركات هنا
 
 class AppTheme {
   // الألوان الأساسية الخاصة بالهوية (ALBAIK)
@@ -11,6 +12,22 @@ class AppTheme {
     return ThemeData(
       scaffoldBackgroundColor: albaikPureWhite,
       primaryColor: albaikDeepNavy,
+      
+      // تضمين ثيم الحركات الموحد للتنقل بين الصفحات
+      pageTransitionsTheme: AppAnimations.pageTransitions,
+
+      // --- الإضافات الجديدة لتوحيد تأثير النقرات (Animations) ---
+      splashColor: albaikRichRed.withOpacity(0.15), // لون تأثير التموج عند النقرة
+      highlightColor: albaikDeepNavy.withOpacity(0.05), // لون الخلفية عند الضغط المطول
+
+      // توحيد تصميم البطاقات لتتفاعل مع النقرات بشكل صحيح
+      cardTheme: CardThemeData( // <-- تم التعديل هنا إلى CardThemeData
+        color: albaikPureWhite,
+        elevation: 1,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        margin: const EdgeInsets.only(bottom: 12),
+        clipBehavior: Clip.antiAlias, // هذا السطر ضروري ليظهر تأثير النقرة داخل حدود البطاقة فقط
+      ),
       
       // توحيد تصميم الشريط العلوي (AppBar) في كل الواجهات
       appBarTheme: const AppBarTheme(

@@ -37,54 +37,74 @@ const MaintenanceTicketSchema = CollectionSchema(
       name: r'expectedCost',
       type: IsarType.double,
     ),
-    r'faultDescription': PropertySchema(
+    r'expectedDeliveryDate': PropertySchema(
       id: 4,
+      name: r'expectedDeliveryDate',
+      type: IsarType.string,
+    ),
+    r'faultDescription': PropertySchema(
+      id: 5,
       name: r'faultDescription',
       type: IsarType.string,
     ),
     r'finalCost': PropertySchema(
-      id: 5,
+      id: 6,
       name: r'finalCost',
       type: IsarType.double,
     ),
     r'firebaseId': PropertySchema(
-      id: 6,
+      id: 7,
       name: r'firebaseId',
       type: IsarType.string,
     ),
     r'imagePath': PropertySchema(
-      id: 7,
+      id: 8,
       name: r'imagePath',
       type: IsarType.string,
     ),
+    r'imagePathAfter': PropertySchema(
+      id: 9,
+      name: r'imagePathAfter',
+      type: IsarType.string,
+    ),
     r'imei': PropertySchema(
-      id: 8,
+      id: 10,
       name: r'imei',
       type: IsarType.string,
     ),
+    r'isArchived': PropertySchema(
+      id: 11,
+      name: r'isArchived',
+      type: IsarType.bool,
+    ),
     r'netProfit': PropertySchema(
-      id: 9,
+      id: 12,
       name: r'netProfit',
       type: IsarType.double,
     ),
     r'phoneNumber': PropertySchema(
-      id: 10,
+      id: 13,
       name: r'phoneNumber',
       type: IsarType.string,
     ),
     r'receivedDate': PropertySchema(
-      id: 11,
+      id: 14,
       name: r'receivedDate',
       type: IsarType.string,
     ),
     r'status': PropertySchema(
-      id: 12,
+      id: 15,
       name: r'status',
       type: IsarType.string,
     ),
     r'syncStatus': PropertySchema(
-      id: 13,
+      id: 16,
       name: r'syncStatus',
+      type: IsarType.long,
+    ),
+    r'updatedAt': PropertySchema(
+      id: 17,
+      name: r'updatedAt',
       type: IsarType.long,
     )
   },
@@ -125,6 +145,12 @@ int _maintenanceTicketEstimateSize(
   bytesCount += 3 + object.customerName.length * 3;
   bytesCount += 3 + object.deviceModel.length * 3;
   bytesCount += 3 + object.deviceType.length * 3;
+  {
+    final value = object.expectedDeliveryDate;
+    if (value != null) {
+      bytesCount += 3 + value.length * 3;
+    }
+  }
   bytesCount += 3 + object.faultDescription.length * 3;
   {
     final value = object.firebaseId;
@@ -134,6 +160,12 @@ int _maintenanceTicketEstimateSize(
   }
   {
     final value = object.imagePath;
+    if (value != null) {
+      bytesCount += 3 + value.length * 3;
+    }
+  }
+  {
+    final value = object.imagePathAfter;
     if (value != null) {
       bytesCount += 3 + value.length * 3;
     }
@@ -155,16 +187,20 @@ void _maintenanceTicketSerialize(
   writer.writeString(offsets[1], object.deviceModel);
   writer.writeString(offsets[2], object.deviceType);
   writer.writeDouble(offsets[3], object.expectedCost);
-  writer.writeString(offsets[4], object.faultDescription);
-  writer.writeDouble(offsets[5], object.finalCost);
-  writer.writeString(offsets[6], object.firebaseId);
-  writer.writeString(offsets[7], object.imagePath);
-  writer.writeString(offsets[8], object.imei);
-  writer.writeDouble(offsets[9], object.netProfit);
-  writer.writeString(offsets[10], object.phoneNumber);
-  writer.writeString(offsets[11], object.receivedDate);
-  writer.writeString(offsets[12], object.status);
-  writer.writeLong(offsets[13], object.syncStatus);
+  writer.writeString(offsets[4], object.expectedDeliveryDate);
+  writer.writeString(offsets[5], object.faultDescription);
+  writer.writeDouble(offsets[6], object.finalCost);
+  writer.writeString(offsets[7], object.firebaseId);
+  writer.writeString(offsets[8], object.imagePath);
+  writer.writeString(offsets[9], object.imagePathAfter);
+  writer.writeString(offsets[10], object.imei);
+  writer.writeBool(offsets[11], object.isArchived);
+  writer.writeDouble(offsets[12], object.netProfit);
+  writer.writeString(offsets[13], object.phoneNumber);
+  writer.writeString(offsets[14], object.receivedDate);
+  writer.writeString(offsets[15], object.status);
+  writer.writeLong(offsets[16], object.syncStatus);
+  writer.writeLong(offsets[17], object.updatedAt);
 }
 
 MaintenanceTicket _maintenanceTicketDeserialize(
@@ -178,17 +214,21 @@ MaintenanceTicket _maintenanceTicketDeserialize(
   object.deviceModel = reader.readString(offsets[1]);
   object.deviceType = reader.readString(offsets[2]);
   object.expectedCost = reader.readDouble(offsets[3]);
-  object.faultDescription = reader.readString(offsets[4]);
-  object.finalCost = reader.readDouble(offsets[5]);
-  object.firebaseId = reader.readStringOrNull(offsets[6]);
-  object.imagePath = reader.readStringOrNull(offsets[7]);
-  object.imei = reader.readString(offsets[8]);
+  object.expectedDeliveryDate = reader.readStringOrNull(offsets[4]);
+  object.faultDescription = reader.readString(offsets[5]);
+  object.finalCost = reader.readDouble(offsets[6]);
+  object.firebaseId = reader.readStringOrNull(offsets[7]);
+  object.imagePath = reader.readStringOrNull(offsets[8]);
+  object.imagePathAfter = reader.readStringOrNull(offsets[9]);
+  object.imei = reader.readString(offsets[10]);
+  object.isArchived = reader.readBool(offsets[11]);
   object.isarId = id;
-  object.netProfit = reader.readDouble(offsets[9]);
-  object.phoneNumber = reader.readString(offsets[10]);
-  object.receivedDate = reader.readString(offsets[11]);
-  object.status = reader.readString(offsets[12]);
-  object.syncStatus = reader.readLong(offsets[13]);
+  object.netProfit = reader.readDouble(offsets[12]);
+  object.phoneNumber = reader.readString(offsets[13]);
+  object.receivedDate = reader.readString(offsets[14]);
+  object.status = reader.readString(offsets[15]);
+  object.syncStatus = reader.readLong(offsets[16]);
+  object.updatedAt = reader.readLong(offsets[17]);
   return object;
 }
 
@@ -208,24 +248,32 @@ P _maintenanceTicketDeserializeProp<P>(
     case 3:
       return (reader.readDouble(offset)) as P;
     case 4:
-      return (reader.readString(offset)) as P;
-    case 5:
-      return (reader.readDouble(offset)) as P;
-    case 6:
       return (reader.readStringOrNull(offset)) as P;
+    case 5:
+      return (reader.readString(offset)) as P;
+    case 6:
+      return (reader.readDouble(offset)) as P;
     case 7:
       return (reader.readStringOrNull(offset)) as P;
     case 8:
-      return (reader.readString(offset)) as P;
+      return (reader.readStringOrNull(offset)) as P;
     case 9:
-      return (reader.readDouble(offset)) as P;
+      return (reader.readStringOrNull(offset)) as P;
     case 10:
       return (reader.readString(offset)) as P;
     case 11:
-      return (reader.readString(offset)) as P;
+      return (reader.readBool(offset)) as P;
     case 12:
-      return (reader.readString(offset)) as P;
+      return (reader.readDouble(offset)) as P;
     case 13:
+      return (reader.readString(offset)) as P;
+    case 14:
+      return (reader.readString(offset)) as P;
+    case 15:
+      return (reader.readString(offset)) as P;
+    case 16:
+      return (reader.readLong(offset)) as P;
+    case 17:
       return (reader.readLong(offset)) as P;
     default:
       throw IsarError('Unknown property with id $propertyId');
@@ -927,6 +975,160 @@ extension MaintenanceTicketQueryFilter
   }
 
   QueryBuilder<MaintenanceTicket, MaintenanceTicket, QAfterFilterCondition>
+      expectedDeliveryDateIsNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNull(
+        property: r'expectedDeliveryDate',
+      ));
+    });
+  }
+
+  QueryBuilder<MaintenanceTicket, MaintenanceTicket, QAfterFilterCondition>
+      expectedDeliveryDateIsNotNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNotNull(
+        property: r'expectedDeliveryDate',
+      ));
+    });
+  }
+
+  QueryBuilder<MaintenanceTicket, MaintenanceTicket, QAfterFilterCondition>
+      expectedDeliveryDateEqualTo(
+    String? value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'expectedDeliveryDate',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<MaintenanceTicket, MaintenanceTicket, QAfterFilterCondition>
+      expectedDeliveryDateGreaterThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'expectedDeliveryDate',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<MaintenanceTicket, MaintenanceTicket, QAfterFilterCondition>
+      expectedDeliveryDateLessThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'expectedDeliveryDate',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<MaintenanceTicket, MaintenanceTicket, QAfterFilterCondition>
+      expectedDeliveryDateBetween(
+    String? lower,
+    String? upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'expectedDeliveryDate',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<MaintenanceTicket, MaintenanceTicket, QAfterFilterCondition>
+      expectedDeliveryDateStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'expectedDeliveryDate',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<MaintenanceTicket, MaintenanceTicket, QAfterFilterCondition>
+      expectedDeliveryDateEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'expectedDeliveryDate',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<MaintenanceTicket, MaintenanceTicket, QAfterFilterCondition>
+      expectedDeliveryDateContains(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'expectedDeliveryDate',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<MaintenanceTicket, MaintenanceTicket, QAfterFilterCondition>
+      expectedDeliveryDateMatches(String pattern, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'expectedDeliveryDate',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<MaintenanceTicket, MaintenanceTicket, QAfterFilterCondition>
+      expectedDeliveryDateIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'expectedDeliveryDate',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<MaintenanceTicket, MaintenanceTicket, QAfterFilterCondition>
+      expectedDeliveryDateIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'expectedDeliveryDate',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<MaintenanceTicket, MaintenanceTicket, QAfterFilterCondition>
       faultDescriptionEqualTo(
     String value, {
     bool caseSensitive = true,
@@ -1437,6 +1639,160 @@ extension MaintenanceTicketQueryFilter
   }
 
   QueryBuilder<MaintenanceTicket, MaintenanceTicket, QAfterFilterCondition>
+      imagePathAfterIsNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNull(
+        property: r'imagePathAfter',
+      ));
+    });
+  }
+
+  QueryBuilder<MaintenanceTicket, MaintenanceTicket, QAfterFilterCondition>
+      imagePathAfterIsNotNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNotNull(
+        property: r'imagePathAfter',
+      ));
+    });
+  }
+
+  QueryBuilder<MaintenanceTicket, MaintenanceTicket, QAfterFilterCondition>
+      imagePathAfterEqualTo(
+    String? value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'imagePathAfter',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<MaintenanceTicket, MaintenanceTicket, QAfterFilterCondition>
+      imagePathAfterGreaterThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'imagePathAfter',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<MaintenanceTicket, MaintenanceTicket, QAfterFilterCondition>
+      imagePathAfterLessThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'imagePathAfter',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<MaintenanceTicket, MaintenanceTicket, QAfterFilterCondition>
+      imagePathAfterBetween(
+    String? lower,
+    String? upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'imagePathAfter',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<MaintenanceTicket, MaintenanceTicket, QAfterFilterCondition>
+      imagePathAfterStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'imagePathAfter',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<MaintenanceTicket, MaintenanceTicket, QAfterFilterCondition>
+      imagePathAfterEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'imagePathAfter',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<MaintenanceTicket, MaintenanceTicket, QAfterFilterCondition>
+      imagePathAfterContains(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'imagePathAfter',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<MaintenanceTicket, MaintenanceTicket, QAfterFilterCondition>
+      imagePathAfterMatches(String pattern, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'imagePathAfter',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<MaintenanceTicket, MaintenanceTicket, QAfterFilterCondition>
+      imagePathAfterIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'imagePathAfter',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<MaintenanceTicket, MaintenanceTicket, QAfterFilterCondition>
+      imagePathAfterIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'imagePathAfter',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<MaintenanceTicket, MaintenanceTicket, QAfterFilterCondition>
       imeiEqualTo(
     String value, {
     bool caseSensitive = true,
@@ -1568,6 +1924,16 @@ extension MaintenanceTicketQueryFilter
       return query.addFilterCondition(FilterCondition.greaterThan(
         property: r'imei',
         value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<MaintenanceTicket, MaintenanceTicket, QAfterFilterCondition>
+      isArchivedEqualTo(bool value) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'isArchived',
+        value: value,
       ));
     });
   }
@@ -2157,6 +2523,62 @@ extension MaintenanceTicketQueryFilter
       ));
     });
   }
+
+  QueryBuilder<MaintenanceTicket, MaintenanceTicket, QAfterFilterCondition>
+      updatedAtEqualTo(int value) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'updatedAt',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<MaintenanceTicket, MaintenanceTicket, QAfterFilterCondition>
+      updatedAtGreaterThan(
+    int value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'updatedAt',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<MaintenanceTicket, MaintenanceTicket, QAfterFilterCondition>
+      updatedAtLessThan(
+    int value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'updatedAt',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<MaintenanceTicket, MaintenanceTicket, QAfterFilterCondition>
+      updatedAtBetween(
+    int lower,
+    int upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'updatedAt',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+      ));
+    });
+  }
 }
 
 extension MaintenanceTicketQueryObject
@@ -2224,6 +2646,20 @@ extension MaintenanceTicketQuerySortBy
   }
 
   QueryBuilder<MaintenanceTicket, MaintenanceTicket, QAfterSortBy>
+      sortByExpectedDeliveryDate() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'expectedDeliveryDate', Sort.asc);
+    });
+  }
+
+  QueryBuilder<MaintenanceTicket, MaintenanceTicket, QAfterSortBy>
+      sortByExpectedDeliveryDateDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'expectedDeliveryDate', Sort.desc);
+    });
+  }
+
+  QueryBuilder<MaintenanceTicket, MaintenanceTicket, QAfterSortBy>
       sortByFaultDescription() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'faultDescription', Sort.asc);
@@ -2280,6 +2716,20 @@ extension MaintenanceTicketQuerySortBy
   }
 
   QueryBuilder<MaintenanceTicket, MaintenanceTicket, QAfterSortBy>
+      sortByImagePathAfter() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'imagePathAfter', Sort.asc);
+    });
+  }
+
+  QueryBuilder<MaintenanceTicket, MaintenanceTicket, QAfterSortBy>
+      sortByImagePathAfterDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'imagePathAfter', Sort.desc);
+    });
+  }
+
+  QueryBuilder<MaintenanceTicket, MaintenanceTicket, QAfterSortBy>
       sortByImei() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'imei', Sort.asc);
@@ -2290,6 +2740,20 @@ extension MaintenanceTicketQuerySortBy
       sortByImeiDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'imei', Sort.desc);
+    });
+  }
+
+  QueryBuilder<MaintenanceTicket, MaintenanceTicket, QAfterSortBy>
+      sortByIsArchived() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'isArchived', Sort.asc);
+    });
+  }
+
+  QueryBuilder<MaintenanceTicket, MaintenanceTicket, QAfterSortBy>
+      sortByIsArchivedDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'isArchived', Sort.desc);
     });
   }
 
@@ -2362,6 +2826,20 @@ extension MaintenanceTicketQuerySortBy
       return query.addSortBy(r'syncStatus', Sort.desc);
     });
   }
+
+  QueryBuilder<MaintenanceTicket, MaintenanceTicket, QAfterSortBy>
+      sortByUpdatedAt() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'updatedAt', Sort.asc);
+    });
+  }
+
+  QueryBuilder<MaintenanceTicket, MaintenanceTicket, QAfterSortBy>
+      sortByUpdatedAtDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'updatedAt', Sort.desc);
+    });
+  }
 }
 
 extension MaintenanceTicketQuerySortThenBy
@@ -2423,6 +2901,20 @@ extension MaintenanceTicketQuerySortThenBy
   }
 
   QueryBuilder<MaintenanceTicket, MaintenanceTicket, QAfterSortBy>
+      thenByExpectedDeliveryDate() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'expectedDeliveryDate', Sort.asc);
+    });
+  }
+
+  QueryBuilder<MaintenanceTicket, MaintenanceTicket, QAfterSortBy>
+      thenByExpectedDeliveryDateDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'expectedDeliveryDate', Sort.desc);
+    });
+  }
+
+  QueryBuilder<MaintenanceTicket, MaintenanceTicket, QAfterSortBy>
       thenByFaultDescription() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'faultDescription', Sort.asc);
@@ -2479,6 +2971,20 @@ extension MaintenanceTicketQuerySortThenBy
   }
 
   QueryBuilder<MaintenanceTicket, MaintenanceTicket, QAfterSortBy>
+      thenByImagePathAfter() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'imagePathAfter', Sort.asc);
+    });
+  }
+
+  QueryBuilder<MaintenanceTicket, MaintenanceTicket, QAfterSortBy>
+      thenByImagePathAfterDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'imagePathAfter', Sort.desc);
+    });
+  }
+
+  QueryBuilder<MaintenanceTicket, MaintenanceTicket, QAfterSortBy>
       thenByImei() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'imei', Sort.asc);
@@ -2489,6 +2995,20 @@ extension MaintenanceTicketQuerySortThenBy
       thenByImeiDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'imei', Sort.desc);
+    });
+  }
+
+  QueryBuilder<MaintenanceTicket, MaintenanceTicket, QAfterSortBy>
+      thenByIsArchived() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'isArchived', Sort.asc);
+    });
+  }
+
+  QueryBuilder<MaintenanceTicket, MaintenanceTicket, QAfterSortBy>
+      thenByIsArchivedDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'isArchived', Sort.desc);
     });
   }
 
@@ -2575,6 +3095,20 @@ extension MaintenanceTicketQuerySortThenBy
       return query.addSortBy(r'syncStatus', Sort.desc);
     });
   }
+
+  QueryBuilder<MaintenanceTicket, MaintenanceTicket, QAfterSortBy>
+      thenByUpdatedAt() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'updatedAt', Sort.asc);
+    });
+  }
+
+  QueryBuilder<MaintenanceTicket, MaintenanceTicket, QAfterSortBy>
+      thenByUpdatedAtDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'updatedAt', Sort.desc);
+    });
+  }
 }
 
 extension MaintenanceTicketQueryWhereDistinct
@@ -2608,6 +3142,14 @@ extension MaintenanceTicketQueryWhereDistinct
   }
 
   QueryBuilder<MaintenanceTicket, MaintenanceTicket, QDistinct>
+      distinctByExpectedDeliveryDate({bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'expectedDeliveryDate',
+          caseSensitive: caseSensitive);
+    });
+  }
+
+  QueryBuilder<MaintenanceTicket, MaintenanceTicket, QDistinct>
       distinctByFaultDescription({bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'faultDescription',
@@ -2636,10 +3178,25 @@ extension MaintenanceTicketQueryWhereDistinct
     });
   }
 
+  QueryBuilder<MaintenanceTicket, MaintenanceTicket, QDistinct>
+      distinctByImagePathAfter({bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'imagePathAfter',
+          caseSensitive: caseSensitive);
+    });
+  }
+
   QueryBuilder<MaintenanceTicket, MaintenanceTicket, QDistinct> distinctByImei(
       {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'imei', caseSensitive: caseSensitive);
+    });
+  }
+
+  QueryBuilder<MaintenanceTicket, MaintenanceTicket, QDistinct>
+      distinctByIsArchived() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'isArchived');
     });
   }
 
@@ -2675,6 +3232,13 @@ extension MaintenanceTicketQueryWhereDistinct
       distinctBySyncStatus() {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'syncStatus');
+    });
+  }
+
+  QueryBuilder<MaintenanceTicket, MaintenanceTicket, QDistinct>
+      distinctByUpdatedAt() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'updatedAt');
     });
   }
 }
@@ -2715,6 +3279,13 @@ extension MaintenanceTicketQueryProperty
     });
   }
 
+  QueryBuilder<MaintenanceTicket, String?, QQueryOperations>
+      expectedDeliveryDateProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'expectedDeliveryDate');
+    });
+  }
+
   QueryBuilder<MaintenanceTicket, String, QQueryOperations>
       faultDescriptionProperty() {
     return QueryBuilder.apply(this, (query) {
@@ -2743,9 +3314,22 @@ extension MaintenanceTicketQueryProperty
     });
   }
 
+  QueryBuilder<MaintenanceTicket, String?, QQueryOperations>
+      imagePathAfterProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'imagePathAfter');
+    });
+  }
+
   QueryBuilder<MaintenanceTicket, String, QQueryOperations> imeiProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'imei');
+    });
+  }
+
+  QueryBuilder<MaintenanceTicket, bool, QQueryOperations> isArchivedProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'isArchived');
     });
   }
 
@@ -2779,6 +3363,12 @@ extension MaintenanceTicketQueryProperty
   QueryBuilder<MaintenanceTicket, int, QQueryOperations> syncStatusProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'syncStatus');
+    });
+  }
+
+  QueryBuilder<MaintenanceTicket, int, QQueryOperations> updatedAtProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'updatedAt');
     });
   }
 }
