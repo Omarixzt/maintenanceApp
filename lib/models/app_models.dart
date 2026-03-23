@@ -84,8 +84,47 @@ class LocalPart {
   @Index(unique: true)
   String? partId;
   String partName = '';
+  String deviceBrand = '';
+  String deviceModel = '';
+  String partType = ''; 
   double costPrice = 0.0;
   int quantity = 0;
+
+  // --- متغيرات المزامنة الذكية المتطورة ---
+  int syncStatus = 0; // 0: يحتاج رفع للسحابة، 1: متزامن
+  @Index()
+  int updatedAt = DateTime.now().millisecondsSinceEpoch; 
+  bool isDeleted = false; // للحذف الذكي (Soft Delete) عند انقطاع الإنترنت
+
+  // تحويل البيانات للرفع إلى فايربيس
+  Map<String, dynamic> toMap() {
+    return {
+      'partId': partId,
+      'partName': partName,
+      'deviceBrand': deviceBrand,
+      'deviceModel': deviceModel,
+      'partType': partType,
+      'costPrice': costPrice,
+      'quantity': quantity,
+      'updatedAt': updatedAt,
+      'isDeleted': isDeleted,
+    };
+  }
+
+  // استقبال البيانات من فايربيس
+  static LocalPart fromMap(Map<String, dynamic> map) {
+    return LocalPart()
+      ..partId = map['partId']
+      ..partName = map['partName'] ?? ''
+      ..deviceBrand = map['deviceBrand'] ?? ''
+      ..deviceModel = map['deviceModel'] ?? ''
+      ..partType = map['partType'] ?? ''
+      ..costPrice = (map['costPrice'] ?? 0.0).toDouble()
+      ..quantity = map['quantity'] ?? 0
+      ..updatedAt = map['updatedAt'] ?? 0
+      ..isDeleted = map['isDeleted'] ?? false
+      ..syncStatus = 1; // بما أنه قادم من السحابة فهو متزامن
+  }
 }
 
 @collection

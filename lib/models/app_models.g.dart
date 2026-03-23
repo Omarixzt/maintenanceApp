@@ -3389,19 +3389,49 @@ const LocalPartSchema = CollectionSchema(
       name: r'costPrice',
       type: IsarType.double,
     ),
-    r'partId': PropertySchema(
+    r'deviceBrand': PropertySchema(
       id: 1,
+      name: r'deviceBrand',
+      type: IsarType.string,
+    ),
+    r'deviceModel': PropertySchema(
+      id: 2,
+      name: r'deviceModel',
+      type: IsarType.string,
+    ),
+    r'isDeleted': PropertySchema(
+      id: 3,
+      name: r'isDeleted',
+      type: IsarType.bool,
+    ),
+    r'partId': PropertySchema(
+      id: 4,
       name: r'partId',
       type: IsarType.string,
     ),
     r'partName': PropertySchema(
-      id: 2,
+      id: 5,
       name: r'partName',
       type: IsarType.string,
     ),
+    r'partType': PropertySchema(
+      id: 6,
+      name: r'partType',
+      type: IsarType.string,
+    ),
     r'quantity': PropertySchema(
-      id: 3,
+      id: 7,
       name: r'quantity',
+      type: IsarType.long,
+    ),
+    r'syncStatus': PropertySchema(
+      id: 8,
+      name: r'syncStatus',
+      type: IsarType.long,
+    ),
+    r'updatedAt': PropertySchema(
+      id: 9,
+      name: r'updatedAt',
       type: IsarType.long,
     )
   },
@@ -3423,6 +3453,19 @@ const LocalPartSchema = CollectionSchema(
           caseSensitive: true,
         )
       ],
+    ),
+    r'updatedAt': IndexSchema(
+      id: -6238191080293565125,
+      name: r'updatedAt',
+      unique: false,
+      replace: false,
+      properties: [
+        IndexPropertySchema(
+          name: r'updatedAt',
+          type: IndexType.value,
+          caseSensitive: false,
+        )
+      ],
     )
   },
   links: {},
@@ -3439,6 +3482,8 @@ int _localPartEstimateSize(
   Map<Type, List<int>> allOffsets,
 ) {
   var bytesCount = offsets.last;
+  bytesCount += 3 + object.deviceBrand.length * 3;
+  bytesCount += 3 + object.deviceModel.length * 3;
   {
     final value = object.partId;
     if (value != null) {
@@ -3446,6 +3491,7 @@ int _localPartEstimateSize(
     }
   }
   bytesCount += 3 + object.partName.length * 3;
+  bytesCount += 3 + object.partType.length * 3;
   return bytesCount;
 }
 
@@ -3456,9 +3502,15 @@ void _localPartSerialize(
   Map<Type, List<int>> allOffsets,
 ) {
   writer.writeDouble(offsets[0], object.costPrice);
-  writer.writeString(offsets[1], object.partId);
-  writer.writeString(offsets[2], object.partName);
-  writer.writeLong(offsets[3], object.quantity);
+  writer.writeString(offsets[1], object.deviceBrand);
+  writer.writeString(offsets[2], object.deviceModel);
+  writer.writeBool(offsets[3], object.isDeleted);
+  writer.writeString(offsets[4], object.partId);
+  writer.writeString(offsets[5], object.partName);
+  writer.writeString(offsets[6], object.partType);
+  writer.writeLong(offsets[7], object.quantity);
+  writer.writeLong(offsets[8], object.syncStatus);
+  writer.writeLong(offsets[9], object.updatedAt);
 }
 
 LocalPart _localPartDeserialize(
@@ -3469,10 +3521,16 @@ LocalPart _localPartDeserialize(
 ) {
   final object = LocalPart();
   object.costPrice = reader.readDouble(offsets[0]);
+  object.deviceBrand = reader.readString(offsets[1]);
+  object.deviceModel = reader.readString(offsets[2]);
+  object.isDeleted = reader.readBool(offsets[3]);
   object.isarId = id;
-  object.partId = reader.readStringOrNull(offsets[1]);
-  object.partName = reader.readString(offsets[2]);
-  object.quantity = reader.readLong(offsets[3]);
+  object.partId = reader.readStringOrNull(offsets[4]);
+  object.partName = reader.readString(offsets[5]);
+  object.partType = reader.readString(offsets[6]);
+  object.quantity = reader.readLong(offsets[7]);
+  object.syncStatus = reader.readLong(offsets[8]);
+  object.updatedAt = reader.readLong(offsets[9]);
   return object;
 }
 
@@ -3486,10 +3544,22 @@ P _localPartDeserializeProp<P>(
     case 0:
       return (reader.readDouble(offset)) as P;
     case 1:
-      return (reader.readStringOrNull(offset)) as P;
+      return (reader.readString(offset)) as P;
     case 2:
       return (reader.readString(offset)) as P;
     case 3:
+      return (reader.readBool(offset)) as P;
+    case 4:
+      return (reader.readStringOrNull(offset)) as P;
+    case 5:
+      return (reader.readString(offset)) as P;
+    case 6:
+      return (reader.readString(offset)) as P;
+    case 7:
+      return (reader.readLong(offset)) as P;
+    case 8:
+      return (reader.readLong(offset)) as P;
+    case 9:
       return (reader.readLong(offset)) as P;
     default:
       throw IsarError('Unknown property with id $propertyId');
@@ -3568,6 +3638,14 @@ extension LocalPartQueryWhereSort
   QueryBuilder<LocalPart, LocalPart, QAfterWhere> anyIsarId() {
     return QueryBuilder.apply(this, (query) {
       return query.addWhereClause(const IdWhereClause.any());
+    });
+  }
+
+  QueryBuilder<LocalPart, LocalPart, QAfterWhere> anyUpdatedAt() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(
+        const IndexWhereClause.any(indexName: r'updatedAt'),
+      );
     });
   }
 }
@@ -3707,6 +3785,96 @@ extension LocalPartQueryWhere
       }
     });
   }
+
+  QueryBuilder<LocalPart, LocalPart, QAfterWhereClause> updatedAtEqualTo(
+      int updatedAt) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.equalTo(
+        indexName: r'updatedAt',
+        value: [updatedAt],
+      ));
+    });
+  }
+
+  QueryBuilder<LocalPart, LocalPart, QAfterWhereClause> updatedAtNotEqualTo(
+      int updatedAt) {
+    return QueryBuilder.apply(this, (query) {
+      if (query.whereSort == Sort.asc) {
+        return query
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'updatedAt',
+              lower: [],
+              upper: [updatedAt],
+              includeUpper: false,
+            ))
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'updatedAt',
+              lower: [updatedAt],
+              includeLower: false,
+              upper: [],
+            ));
+      } else {
+        return query
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'updatedAt',
+              lower: [updatedAt],
+              includeLower: false,
+              upper: [],
+            ))
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'updatedAt',
+              lower: [],
+              upper: [updatedAt],
+              includeUpper: false,
+            ));
+      }
+    });
+  }
+
+  QueryBuilder<LocalPart, LocalPart, QAfterWhereClause> updatedAtGreaterThan(
+    int updatedAt, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.between(
+        indexName: r'updatedAt',
+        lower: [updatedAt],
+        includeLower: include,
+        upper: [],
+      ));
+    });
+  }
+
+  QueryBuilder<LocalPart, LocalPart, QAfterWhereClause> updatedAtLessThan(
+    int updatedAt, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.between(
+        indexName: r'updatedAt',
+        lower: [],
+        upper: [updatedAt],
+        includeUpper: include,
+      ));
+    });
+  }
+
+  QueryBuilder<LocalPart, LocalPart, QAfterWhereClause> updatedAtBetween(
+    int lowerUpdatedAt,
+    int upperUpdatedAt, {
+    bool includeLower = true,
+    bool includeUpper = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.between(
+        indexName: r'updatedAt',
+        lower: [lowerUpdatedAt],
+        includeLower: includeLower,
+        upper: [upperUpdatedAt],
+        includeUpper: includeUpper,
+      ));
+    });
+  }
 }
 
 extension LocalPartQueryFilter
@@ -3770,6 +3938,284 @@ extension LocalPartQueryFilter
         upper: upper,
         includeUpper: includeUpper,
         epsilon: epsilon,
+      ));
+    });
+  }
+
+  QueryBuilder<LocalPart, LocalPart, QAfterFilterCondition> deviceBrandEqualTo(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'deviceBrand',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<LocalPart, LocalPart, QAfterFilterCondition>
+      deviceBrandGreaterThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'deviceBrand',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<LocalPart, LocalPart, QAfterFilterCondition> deviceBrandLessThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'deviceBrand',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<LocalPart, LocalPart, QAfterFilterCondition> deviceBrandBetween(
+    String lower,
+    String upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'deviceBrand',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<LocalPart, LocalPart, QAfterFilterCondition>
+      deviceBrandStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'deviceBrand',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<LocalPart, LocalPart, QAfterFilterCondition> deviceBrandEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'deviceBrand',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<LocalPart, LocalPart, QAfterFilterCondition> deviceBrandContains(
+      String value,
+      {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'deviceBrand',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<LocalPart, LocalPart, QAfterFilterCondition> deviceBrandMatches(
+      String pattern,
+      {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'deviceBrand',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<LocalPart, LocalPart, QAfterFilterCondition>
+      deviceBrandIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'deviceBrand',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<LocalPart, LocalPart, QAfterFilterCondition>
+      deviceBrandIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'deviceBrand',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<LocalPart, LocalPart, QAfterFilterCondition> deviceModelEqualTo(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'deviceModel',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<LocalPart, LocalPart, QAfterFilterCondition>
+      deviceModelGreaterThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'deviceModel',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<LocalPart, LocalPart, QAfterFilterCondition> deviceModelLessThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'deviceModel',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<LocalPart, LocalPart, QAfterFilterCondition> deviceModelBetween(
+    String lower,
+    String upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'deviceModel',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<LocalPart, LocalPart, QAfterFilterCondition>
+      deviceModelStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'deviceModel',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<LocalPart, LocalPart, QAfterFilterCondition> deviceModelEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'deviceModel',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<LocalPart, LocalPart, QAfterFilterCondition> deviceModelContains(
+      String value,
+      {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'deviceModel',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<LocalPart, LocalPart, QAfterFilterCondition> deviceModelMatches(
+      String pattern,
+      {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'deviceModel',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<LocalPart, LocalPart, QAfterFilterCondition>
+      deviceModelIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'deviceModel',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<LocalPart, LocalPart, QAfterFilterCondition>
+      deviceModelIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'deviceModel',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<LocalPart, LocalPart, QAfterFilterCondition> isDeletedEqualTo(
+      bool value) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'isDeleted',
+        value: value,
       ));
     });
   }
@@ -4104,6 +4550,137 @@ extension LocalPartQueryFilter
     });
   }
 
+  QueryBuilder<LocalPart, LocalPart, QAfterFilterCondition> partTypeEqualTo(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'partType',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<LocalPart, LocalPart, QAfterFilterCondition> partTypeGreaterThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'partType',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<LocalPart, LocalPart, QAfterFilterCondition> partTypeLessThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'partType',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<LocalPart, LocalPart, QAfterFilterCondition> partTypeBetween(
+    String lower,
+    String upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'partType',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<LocalPart, LocalPart, QAfterFilterCondition> partTypeStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'partType',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<LocalPart, LocalPart, QAfterFilterCondition> partTypeEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'partType',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<LocalPart, LocalPart, QAfterFilterCondition> partTypeContains(
+      String value,
+      {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'partType',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<LocalPart, LocalPart, QAfterFilterCondition> partTypeMatches(
+      String pattern,
+      {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'partType',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<LocalPart, LocalPart, QAfterFilterCondition> partTypeIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'partType',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<LocalPart, LocalPart, QAfterFilterCondition>
+      partTypeIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'partType',
+        value: '',
+      ));
+    });
+  }
+
   QueryBuilder<LocalPart, LocalPart, QAfterFilterCondition> quantityEqualTo(
       int value) {
     return QueryBuilder.apply(this, (query) {
@@ -4156,6 +4733,114 @@ extension LocalPartQueryFilter
       ));
     });
   }
+
+  QueryBuilder<LocalPart, LocalPart, QAfterFilterCondition> syncStatusEqualTo(
+      int value) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'syncStatus',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<LocalPart, LocalPart, QAfterFilterCondition>
+      syncStatusGreaterThan(
+    int value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'syncStatus',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<LocalPart, LocalPart, QAfterFilterCondition> syncStatusLessThan(
+    int value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'syncStatus',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<LocalPart, LocalPart, QAfterFilterCondition> syncStatusBetween(
+    int lower,
+    int upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'syncStatus',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+      ));
+    });
+  }
+
+  QueryBuilder<LocalPart, LocalPart, QAfterFilterCondition> updatedAtEqualTo(
+      int value) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'updatedAt',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<LocalPart, LocalPart, QAfterFilterCondition>
+      updatedAtGreaterThan(
+    int value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'updatedAt',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<LocalPart, LocalPart, QAfterFilterCondition> updatedAtLessThan(
+    int value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'updatedAt',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<LocalPart, LocalPart, QAfterFilterCondition> updatedAtBetween(
+    int lower,
+    int upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'updatedAt',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+      ));
+    });
+  }
 }
 
 extension LocalPartQueryObject
@@ -4174,6 +4859,42 @@ extension LocalPartQuerySortBy on QueryBuilder<LocalPart, LocalPart, QSortBy> {
   QueryBuilder<LocalPart, LocalPart, QAfterSortBy> sortByCostPriceDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'costPrice', Sort.desc);
+    });
+  }
+
+  QueryBuilder<LocalPart, LocalPart, QAfterSortBy> sortByDeviceBrand() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'deviceBrand', Sort.asc);
+    });
+  }
+
+  QueryBuilder<LocalPart, LocalPart, QAfterSortBy> sortByDeviceBrandDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'deviceBrand', Sort.desc);
+    });
+  }
+
+  QueryBuilder<LocalPart, LocalPart, QAfterSortBy> sortByDeviceModel() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'deviceModel', Sort.asc);
+    });
+  }
+
+  QueryBuilder<LocalPart, LocalPart, QAfterSortBy> sortByDeviceModelDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'deviceModel', Sort.desc);
+    });
+  }
+
+  QueryBuilder<LocalPart, LocalPart, QAfterSortBy> sortByIsDeleted() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'isDeleted', Sort.asc);
+    });
+  }
+
+  QueryBuilder<LocalPart, LocalPart, QAfterSortBy> sortByIsDeletedDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'isDeleted', Sort.desc);
     });
   }
 
@@ -4201,6 +4922,18 @@ extension LocalPartQuerySortBy on QueryBuilder<LocalPart, LocalPart, QSortBy> {
     });
   }
 
+  QueryBuilder<LocalPart, LocalPart, QAfterSortBy> sortByPartType() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'partType', Sort.asc);
+    });
+  }
+
+  QueryBuilder<LocalPart, LocalPart, QAfterSortBy> sortByPartTypeDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'partType', Sort.desc);
+    });
+  }
+
   QueryBuilder<LocalPart, LocalPart, QAfterSortBy> sortByQuantity() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'quantity', Sort.asc);
@@ -4210,6 +4943,30 @@ extension LocalPartQuerySortBy on QueryBuilder<LocalPart, LocalPart, QSortBy> {
   QueryBuilder<LocalPart, LocalPart, QAfterSortBy> sortByQuantityDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'quantity', Sort.desc);
+    });
+  }
+
+  QueryBuilder<LocalPart, LocalPart, QAfterSortBy> sortBySyncStatus() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'syncStatus', Sort.asc);
+    });
+  }
+
+  QueryBuilder<LocalPart, LocalPart, QAfterSortBy> sortBySyncStatusDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'syncStatus', Sort.desc);
+    });
+  }
+
+  QueryBuilder<LocalPart, LocalPart, QAfterSortBy> sortByUpdatedAt() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'updatedAt', Sort.asc);
+    });
+  }
+
+  QueryBuilder<LocalPart, LocalPart, QAfterSortBy> sortByUpdatedAtDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'updatedAt', Sort.desc);
     });
   }
 }
@@ -4225,6 +4982,42 @@ extension LocalPartQuerySortThenBy
   QueryBuilder<LocalPart, LocalPart, QAfterSortBy> thenByCostPriceDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'costPrice', Sort.desc);
+    });
+  }
+
+  QueryBuilder<LocalPart, LocalPart, QAfterSortBy> thenByDeviceBrand() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'deviceBrand', Sort.asc);
+    });
+  }
+
+  QueryBuilder<LocalPart, LocalPart, QAfterSortBy> thenByDeviceBrandDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'deviceBrand', Sort.desc);
+    });
+  }
+
+  QueryBuilder<LocalPart, LocalPart, QAfterSortBy> thenByDeviceModel() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'deviceModel', Sort.asc);
+    });
+  }
+
+  QueryBuilder<LocalPart, LocalPart, QAfterSortBy> thenByDeviceModelDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'deviceModel', Sort.desc);
+    });
+  }
+
+  QueryBuilder<LocalPart, LocalPart, QAfterSortBy> thenByIsDeleted() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'isDeleted', Sort.asc);
+    });
+  }
+
+  QueryBuilder<LocalPart, LocalPart, QAfterSortBy> thenByIsDeletedDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'isDeleted', Sort.desc);
     });
   }
 
@@ -4264,6 +5057,18 @@ extension LocalPartQuerySortThenBy
     });
   }
 
+  QueryBuilder<LocalPart, LocalPart, QAfterSortBy> thenByPartType() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'partType', Sort.asc);
+    });
+  }
+
+  QueryBuilder<LocalPart, LocalPart, QAfterSortBy> thenByPartTypeDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'partType', Sort.desc);
+    });
+  }
+
   QueryBuilder<LocalPart, LocalPart, QAfterSortBy> thenByQuantity() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'quantity', Sort.asc);
@@ -4275,6 +5080,30 @@ extension LocalPartQuerySortThenBy
       return query.addSortBy(r'quantity', Sort.desc);
     });
   }
+
+  QueryBuilder<LocalPart, LocalPart, QAfterSortBy> thenBySyncStatus() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'syncStatus', Sort.asc);
+    });
+  }
+
+  QueryBuilder<LocalPart, LocalPart, QAfterSortBy> thenBySyncStatusDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'syncStatus', Sort.desc);
+    });
+  }
+
+  QueryBuilder<LocalPart, LocalPart, QAfterSortBy> thenByUpdatedAt() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'updatedAt', Sort.asc);
+    });
+  }
+
+  QueryBuilder<LocalPart, LocalPart, QAfterSortBy> thenByUpdatedAtDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'updatedAt', Sort.desc);
+    });
+  }
 }
 
 extension LocalPartQueryWhereDistinct
@@ -4282,6 +5111,26 @@ extension LocalPartQueryWhereDistinct
   QueryBuilder<LocalPart, LocalPart, QDistinct> distinctByCostPrice() {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'costPrice');
+    });
+  }
+
+  QueryBuilder<LocalPart, LocalPart, QDistinct> distinctByDeviceBrand(
+      {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'deviceBrand', caseSensitive: caseSensitive);
+    });
+  }
+
+  QueryBuilder<LocalPart, LocalPart, QDistinct> distinctByDeviceModel(
+      {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'deviceModel', caseSensitive: caseSensitive);
+    });
+  }
+
+  QueryBuilder<LocalPart, LocalPart, QDistinct> distinctByIsDeleted() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'isDeleted');
     });
   }
 
@@ -4299,9 +5148,28 @@ extension LocalPartQueryWhereDistinct
     });
   }
 
+  QueryBuilder<LocalPart, LocalPart, QDistinct> distinctByPartType(
+      {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'partType', caseSensitive: caseSensitive);
+    });
+  }
+
   QueryBuilder<LocalPart, LocalPart, QDistinct> distinctByQuantity() {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'quantity');
+    });
+  }
+
+  QueryBuilder<LocalPart, LocalPart, QDistinct> distinctBySyncStatus() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'syncStatus');
+    });
+  }
+
+  QueryBuilder<LocalPart, LocalPart, QDistinct> distinctByUpdatedAt() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'updatedAt');
     });
   }
 }
@@ -4320,6 +5188,24 @@ extension LocalPartQueryProperty
     });
   }
 
+  QueryBuilder<LocalPart, String, QQueryOperations> deviceBrandProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'deviceBrand');
+    });
+  }
+
+  QueryBuilder<LocalPart, String, QQueryOperations> deviceModelProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'deviceModel');
+    });
+  }
+
+  QueryBuilder<LocalPart, bool, QQueryOperations> isDeletedProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'isDeleted');
+    });
+  }
+
   QueryBuilder<LocalPart, String?, QQueryOperations> partIdProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'partId');
@@ -4332,9 +5218,27 @@ extension LocalPartQueryProperty
     });
   }
 
+  QueryBuilder<LocalPart, String, QQueryOperations> partTypeProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'partType');
+    });
+  }
+
   QueryBuilder<LocalPart, int, QQueryOperations> quantityProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'quantity');
+    });
+  }
+
+  QueryBuilder<LocalPart, int, QQueryOperations> syncStatusProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'syncStatus');
+    });
+  }
+
+  QueryBuilder<LocalPart, int, QQueryOperations> updatedAtProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'updatedAt');
     });
   }
 }

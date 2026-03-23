@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../providers/app_provider.dart';
+import 'package:blue_thermal_printer/blue_thermal_printer.dart';
+import '../providers/settings_provider.dart';
+import '../providers/inventory_provider.dart';
+import '../services/printer_service.dart';
 import '../theme/custom_app_bar.dart';
 import '../theme/app_theme.dart';
 
@@ -14,38 +17,121 @@ class SettingsTab extends StatefulWidget {
 class _SettingsTabState extends State<SettingsTab> {
   late TextEditingController _tokenCtrl;
   late TextEditingController _chatIdCtrl;
-  late TextEditingController _macCtrl;
   late TextEditingController _cleanupDaysCtrl;
+  
   bool _isExporting = false;
   bool _isSyncingPrices = false;
   bool _autoCleanupEnabled = false;
 
+  // متغيرات البلوتوث الجديدة
+  List<BluetoothDevice> _devices = [];
+  BluetoothDevice? _selectedDevice;
+  bool _isFetchingDevices = false;
+
   @override
   void initState() {
     super.initState();
-    final provider = Provider.of<AppProvider>(context, listen: false);
+    final provider = Provider.of<SettingsProvider>(context, listen: false);
     _tokenCtrl = TextEditingController(text: provider.telegramBotToken);
     _chatIdCtrl = TextEditingController(text: provider.telegramChatId);
-    _macCtrl = TextEditingController(text: provider.printerMac);
     
     _autoCleanupEnabled = provider.autoCleanupEnabled;
     _cleanupDaysCtrl = TextEditingController(text: provider.autoCleanupDays.toString());
+
+    _initBluetooth();
   }
 
   @override
   void dispose() {
     _tokenCtrl.dispose();
     _chatIdCtrl.dispose();
-    _macCtrl.dispose();
     _cleanupDaysCtrl.dispose();
     super.dispose();
   }
 
   void _unfocusAll() => FocusManager.instance.primaryFocus?.unfocus();
 
+  // دالة جلب الأجهزة المقترنة بالبلوتوث
+  Future<void> _initBluetooth() async {
+    setState(() => _isFetchingDevices = true);
+    try {
+      List<BluetoothDevice> devices = await PrinterService.bluetooth.getBondedDevices();
+      if (!mounted) return;
+      
+      setState(() {
+        _devices = devices;
+        final savedMac = Provider.of<SettingsProvider>(context, listen: false).printerMac;
+        
+        // محاولة تحديد الطابعة المحفوظة مسبقاً إن وجدت
+        if (savedMac.isNotEmpty) {
+          try {
+            _selectedDevice = _devices.firstWhere((d) => d.address == savedMac);
+          } catch (e) {
+            _selectedDevice = null;
+          }
+        }
+      });
+    } catch (e) {
+      _showMessage('خطأ في جلب أجهزة البلوتوث المقترنة', isError: true);
+    }
+    if (mounted) {
+      setState(() => _isFetchingDevices = false);
+    }
+  }
+
+  Future<void> _checkPrinterConnection(String macAddress) async {
+    try {
+      final connected = await PrinterService.bluetooth.isConnected;
+      if (connected == true) {
+        _showMessage('الطابعة متصلة حالياً');
+        return;
+      }
+
+      if (macAddress.isEmpty) {
+        _showMessage('يرجى اختيار الطابعة من القائمة أولاً', isError: true);
+        return;
+      }
+
+      await PrinterService.bluetooth.connect(BluetoothDevice('Printer', macAddress));
+      final nowConnected = await PrinterService.bluetooth.isConnected;
+      if (nowConnected == true) {
+        _showMessage('تم الاتصال بالطابعة بنجاح');
+      } else {
+        _showMessage('فشل اتصال الطابعة. تأكد من تشغيلها وإقرانها من الجهاز', isError: true);
+      }
+    } catch (e) {
+      _showMessage('خطأ في فحص الطابعة: $e', isError: true);
+    }
+  }
+
+  Future<void> _printTestPage(String macAddress) async {
+    if (macAddress.isEmpty) {
+      _showMessage('يرجى اختيار الطابعة من القائمة أولاً', isError: true);
+      return;
+    }
+
+    try {
+      await PrinterService.testPrinter(macAddress);
+      _showMessage('تم إرسال الطباعة التجريبية بنجاح');
+    } catch (e) {
+      _showMessage('فشل في طباعة الصفحة التجريبية: $e', isError: true);
+    }
+  }
+
+  void _showMessage(String text, {bool isError = false}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(text),
+        backgroundColor: isError ? AppTheme.albaikRichRed : Colors.green.shade700,
+        duration: const Duration(seconds: 3),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final provider = Provider.of<AppProvider>(context);
+    final provider = Provider.of<SettingsProvider>(context);
 
     return Scaffold(
       appBar: const CustomAppBar(title: 'الإعدادات والتقارير'),
@@ -69,7 +155,8 @@ class _SettingsTabState extends State<SettingsTab> {
                   _unfocusAll();
                   setState(() => _isSyncingPrices = true);
                   
-                  final resultMessage = await provider.syncPricesFromCloud();
+                  final inventoryProvider = Provider.of<InventoryProvider>(context, listen: false);
+                  final resultMessage = await inventoryProvider.syncPricesFromCloud();
                   
                   setState(() => _isSyncingPrices = false);
                   
@@ -87,13 +174,90 @@ class _SettingsTabState extends State<SettingsTab> {
               Divider(color: Colors.grey.shade300, thickness: 1),
               const SizedBox(height: 32),
 
-              // إعدادات الطابعة
+              // إعدادات الطابعة (تم التعديل لتصبح قائمة منسدلة)
               const Text('إعدادات الطابعة (Bluetooth)', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.albaikDeepNavy)),
+              const SizedBox(height: 8),
+              const Text('تأكد من اقتران الطابعة بالجوال من إعدادات النظام لتظهر في القائمة.', style: TextStyle(color: Colors.grey, fontSize: 12)),
               const SizedBox(height: 12),
-              TextFormField(
-                controller: _macCtrl,
-                decoration: const InputDecoration(labelText: 'MAC Address للطابعة', prefixIcon: Icon(Icons.print_outlined)),
+              
+              Row(
+                children: [
+                  Expanded(
+                    child: DropdownButtonFormField<BluetoothDevice>(
+                      decoration: const InputDecoration(
+                        labelText: 'اختر الطابعة المقترنة',
+                        prefixIcon: Icon(Icons.bluetooth),
+                      ),
+                      value: _selectedDevice,
+                      items: _devices.map((device) {
+                        return DropdownMenuItem<BluetoothDevice>(
+                          value: device,
+                          child: Text(
+                            device.name ?? 'جهاز غير معروف',
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        );
+                      }).toList(),
+                      onChanged: (BluetoothDevice? device) {
+                        if (device != null) {
+                          setState(() {
+                            _selectedDevice = device;
+                            provider.printerMac = device.address ?? '';
+                          });
+                        }
+                      },
+                      hint: _isFetchingDevices 
+                          ? const Text('جاري البحث...') 
+                          : const Text('اضغط لاختيار الطابعة'),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: AppTheme.albaikDeepNavy.withValues(alpha: 0.05),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: IconButton(
+                      icon: const Icon(Icons.refresh, color: AppTheme.albaikDeepNavy),
+                      onPressed: _initBluetooth,
+                      tooltip: 'تحديث القائمة',
+                    ),
+                  ),
+                ],
               ),
+              
+              if (_selectedDevice != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  'MAC Address: ${_selectedDevice!.address}',
+                  style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                  textAlign: TextAlign.left,
+                ),
+              ],
+              const SizedBox(height: 16),
+
+              Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      icon: const Icon(Icons.wifi_protected_setup),
+                      label: const Text('فحص اتصال الطابعة'),
+                      onPressed: () => _checkPrinterConnection(provider.printerMac),
+                      style: ElevatedButton.styleFrom(backgroundColor: AppTheme.albaikDeepNavy),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      icon: const Icon(Icons.print),
+                      label: const Text('طباعة تجريبية'),
+                      onPressed: () => _printTestPage(provider.printerMac),
+                      style: OutlinedButton.styleFrom(side: const BorderSide(color: AppTheme.albaikDeepNavy)),
+                    ),
+                  ),
+                ],
+              ),
+
               const SizedBox(height: 32),
               
               // إعدادات Telegram
@@ -123,7 +287,8 @@ class _SettingsTabState extends State<SettingsTab> {
                 contentPadding: EdgeInsets.zero,
                 title: const Text('التنظيف التلقائي للصور', style: TextStyle(fontWeight: FontWeight.bold)),
                 subtitle: Text(_autoCleanupEnabled ? 'مفعل (يعمل عند فتح التطبيق)' : 'معطل'),
-                activeColor: AppTheme.albaikRichRed,
+                activeThumbColor: AppTheme.albaikRichRed,
+                activeTrackColor: AppTheme.albaikRichRed.withValues(alpha: 0.5),
                 value: _autoCleanupEnabled,
                 onChanged: (val) {
                   _unfocusAll();
@@ -154,7 +319,6 @@ class _SettingsTabState extends State<SettingsTab> {
                   _unfocusAll();
                   int days = int.tryParse(_cleanupDaysCtrl.text) ?? 90;
                   
-                  // رسالة التأكيد
                   bool? confirm = await showDialog<bool>(
                     context: context,
                     builder: (BuildContext ctx) {
@@ -203,11 +367,11 @@ class _SettingsTabState extends State<SettingsTab> {
 
               const SizedBox(height: 32),
               
-              // زر حفظ الإعدادات (تمت إعادته هنا)
+              // زر حفظ الإعدادات
               ElevatedButton(
                 onPressed: () async {
                   _unfocusAll();
-                  provider.saveSettings(_tokenCtrl.text.trim(), _chatIdCtrl.text.trim(), _macCtrl.text.trim());
+                  provider.saveSettings(_tokenCtrl.text.trim(), _chatIdCtrl.text.trim(), provider.printerMac);
                   
                   int days = int.tryParse(_cleanupDaysCtrl.text) ?? 90;
                   await provider.updateAutoCleanupSettings(_autoCleanupEnabled, days);

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:reorderable_grid_view/reorderable_grid_view.dart';
-import '../providers/app_provider.dart';
+import '../providers/inventory_provider.dart';
 import '../models/app_models.dart';
 import '../theme/app_theme.dart';
 import '../theme/app_animations.dart';
@@ -47,7 +47,8 @@ class BrandPickerSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<AppProvider>(
+    // تم التعديل هنا لاستخدام InventoryProvider بدلاً من AppProvider
+    return Consumer<InventoryProvider>(
       builder: (context, provider, child) {
         return Container(
           height: MediaQuery.of(context).size.height * 0.70,

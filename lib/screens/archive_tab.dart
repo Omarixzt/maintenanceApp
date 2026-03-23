@@ -1,9 +1,11 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import 'package:isar/isar.dart';
 import '../models/app_models.dart';
 import '../services/isar_service.dart';
+import '../providers/ticket_provider.dart'; // <-- استيراد مزود التذاكر
 import '../theme/custom_app_bar.dart';
 import '../theme/app_theme.dart';
 
@@ -19,6 +21,7 @@ class _ArchiveTabState extends State<ArchiveTab> {
   DateTime? _selectedFilterDate; 
   List<MaintenanceTicket> _archivedTickets = [];
   bool _isLoading = true;
+  bool _isSyncing = false; // <-- متغير لحالة المزامنة
 
   @override
   void initState() {
@@ -27,7 +30,8 @@ class _ArchiveTabState extends State<ArchiveTab> {
   }
 
   Future<void> _loadArchivedTickets() async {
-    final isar = await IsarService.db;
+    // تم تصحيح هذا السطر بإزالة await لأن db ليس Future
+    final isar = IsarService.db;
     final tickets = await isar.maintenanceTickets
         .filter()
         .isArchivedEqualTo(true)
@@ -38,6 +42,31 @@ class _ArchiveTabState extends State<ArchiveTab> {
       _archivedTickets = tickets;
       _isLoading = false;
     });
+  }
+
+  // دالة المزامنة من السحابة
+  Future<void> _syncArchiveFromCloud() async {
+    setState(() {
+      _isSyncing = true;
+    });
+    
+    final provider = Provider.of<TicketProvider>(context, listen: false);
+    final resultMessage = await provider.syncNewArchivedTickets();
+    
+    await _loadArchivedTickets();
+    
+    setState(() {
+      _isSyncing = false;
+    });
+    
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(resultMessage),
+          backgroundColor: AppTheme.albaikDeepNavy,
+        ),
+      );
+    }
   }
 
   void _unfocusAll() {
@@ -184,7 +213,7 @@ class _ArchiveTabState extends State<ArchiveTab> {
       padding: const EdgeInsets.only(bottom: 16),
       child: Row(
         children: [
-          Icon(icon, color: AppTheme.albaikDeepNavy.withOpacity(0.6), size: 20),
+          Icon(icon, color: AppTheme.albaikDeepNavy.withValues(alpha: 0.6), size: 20),
           const SizedBox(width: 12),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -287,9 +316,9 @@ class _ArchiveTabState extends State<ArchiveTab> {
                       ),
                     ),
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 8),
                   
-                  // زر التقويم أصبح على الجهة الأخرى
+                  // زر التقويم
                   AnimatedContainer(
                     duration: const Duration(milliseconds: 300),
                     height: 52, 
@@ -298,7 +327,7 @@ class _ArchiveTabState extends State<ArchiveTab> {
                       color: _selectedFilterDate != null ? AppTheme.albaikRichRed : Colors.grey.shade100,
                       borderRadius: BorderRadius.circular(15),
                       boxShadow: _selectedFilterDate != null ? [
-                        BoxShadow(color: AppTheme.albaikRichRed.withOpacity(0.3), blurRadius: 8, offset: const Offset(0, 4))
+                        BoxShadow(color: AppTheme.albaikRichRed.withValues(alpha: 0.3), blurRadius: 8, offset: const Offset(0, 4))
                       ] : [],
                     ),
                     child: IconButton(
@@ -338,6 +367,24 @@ class _ArchiveTabState extends State<ArchiveTab> {
                       },
                     ),
                   ),
+                  
+                  const SizedBox(width: 8),
+                  // الزر الجديد: زر مزامنة الأرشيف السحابي
+                  Container(
+                    height: 52,
+                    width: 52,
+                    decoration: BoxDecoration(
+                      color: AppTheme.albaikRichRed.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(15),
+                    ),
+                    child: IconButton(
+                      icon: _isSyncing 
+                          ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: AppTheme.albaikRichRed, strokeWidth: 2))
+                          : const Icon(Icons.cloud_download, color: AppTheme.albaikRichRed),
+                      onPressed: _isSyncing ? null : _syncArchiveFromCloud,
+                      tooltip: 'سحب الأجهزة المؤرشفة الجديدة',
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -346,7 +393,25 @@ class _ArchiveTabState extends State<ArchiveTab> {
               child: _isLoading
                   ? const Center(child: CircularProgressIndicator(color: AppTheme.albaikRichRed))
                   : sortedDates.isEmpty
-                      ? Center(child: Text((_searchQuery.isEmpty && _selectedFilterDate == null) ? 'الأرشيف فارغ حالياً' : 'لا توجد نتائج مطابقة', style: TextStyle(color: AppTheme.albaikDeepNavy.withOpacity(0.5))))
+                      ? Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.archive_outlined, size: 80, color: AppTheme.albaikDeepNavy.withValues(alpha: 0.1)),
+                              const SizedBox(height: 16),
+                              Text((_searchQuery.isEmpty && _selectedFilterDate == null) ? 'الأرشيف المحلي فارغ' : 'لا توجد نتائج مطابقة', style: TextStyle(color: AppTheme.albaikDeepNavy.withValues(alpha: 0.5), fontSize: 16, fontWeight: FontWeight.bold)),
+                              
+                              if (_searchQuery.isEmpty && _selectedFilterDate == null) ...[
+                                const SizedBox(height: 16),
+                                TextButton.icon(
+                                  onPressed: _isSyncing ? null : _syncArchiveFromCloud,
+                                  icon: const Icon(Icons.cloud_download),
+                                  label: const Text('اضغط لجلب الأرشيف القديم من السحابة'),
+                                ),
+                              ]
+                            ],
+                          ),
+                        )
                       : ListView.builder(
                           padding: const EdgeInsets.symmetric(horizontal: 16.0),
                           itemCount: sortedDates.length,
@@ -364,7 +429,7 @@ class _ArchiveTabState extends State<ArchiveTab> {
                                       Container(
                                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                                         decoration: BoxDecoration(
-                                          color: AppTheme.albaikDeepNavy.withOpacity(0.05),
+                                          color: AppTheme.albaikDeepNavy.withValues(alpha: 0.05),
                                           borderRadius: BorderRadius.circular(10),
                                         ),
                                         child: Text(
@@ -408,9 +473,9 @@ class _ArchiveTabState extends State<ArchiveTab> {
                                                       const SizedBox(height: 4),
                                                       Row(
                                                         children: [
-                                                          Icon(Icons.phone, size: 14, color: AppTheme.albaikDeepNavy.withOpacity(0.6)),
+                                                          Icon(Icons.phone, size: 14, color: AppTheme.albaikDeepNavy.withValues(alpha: 0.6)),
                                                           const SizedBox(width: 4),
-                                                          Text(t.phoneNumber, style: TextStyle(fontSize: 13, color: AppTheme.albaikDeepNavy.withOpacity(0.8), fontWeight: FontWeight.w600)),
+                                                          Text(t.phoneNumber, style: TextStyle(fontSize: 13, color: AppTheme.albaikDeepNavy.withValues(alpha: 0.8), fontWeight: FontWeight.w600)),
                                                         ],
                                                       ),
                                                     ],
@@ -431,9 +496,9 @@ class _ArchiveTabState extends State<ArchiveTab> {
                                             Row(
                                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                               children: [
-                                                Text('تاريخ الاستلام: $dateFormatted', style: TextStyle(fontSize: 12, color: AppTheme.albaikDeepNavy.withOpacity(0.5))),
+                                                Text('تاريخ الاستلام: $dateFormatted', style: TextStyle(fontSize: 12, color: AppTheme.albaikDeepNavy.withValues(alpha: 0.5))),
                                                 if (t.expectedDeliveryDate != null)
-                                                  Text('التسليم: ${DateFormat('yyyy-MM-dd').format(DateTime.parse(t.expectedDeliveryDate!))}', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.albaikDeepNavy.withOpacity(0.7))),
+                                                  Text('التسليم: ${DateFormat('yyyy-MM-dd').format(DateTime.parse(t.expectedDeliveryDate!))}', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.albaikDeepNavy.withValues(alpha: 0.7))),
                                               ],
                                             ),
                                             const SizedBox(height: 8),

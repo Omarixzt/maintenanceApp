@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
-import '../providers/app_provider.dart';
+import '../providers/ticket_provider.dart';
+import '../providers/inventory_provider.dart';
+import '../providers/settings_provider.dart';
 import '../models/app_models.dart';
 import '../theme/app_theme.dart';
 import '../theme/custom_app_bar.dart';
@@ -12,6 +14,7 @@ import '../theme/app_animations.dart';
 // استدعاء الملفات الجديدة
 import 'intake_pickers.dart';
 import 'intake_components.dart';
+import '../services/printer_service.dart';
 
 class IntakeTab extends StatefulWidget {
   const IntakeTab({Key? key}) : super(key: key);
@@ -50,14 +53,12 @@ class _IntakeTabState extends State<IntakeTab> {
 
   File? _deviceImageFile;
   final ImagePicker _picker = ImagePicker();
+  MaintenanceTicket? _lastSavedTicket;
 
   @override
   void initState() {
     super.initState();
     _costCtrl.addListener(_onCostChanged);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      Provider.of<AppProvider>(context, listen: false).loadDynamicData();
-    });
   }
 
   void _onCostChanged() {
@@ -82,11 +83,11 @@ class _IntakeTabState extends State<IntakeTab> {
   void _triggerPriceFetch() {
     final typedModel = _modelCtrl.text.trim().toUpperCase(); 
     
-    if (typedModel.isNotEmpty && _selectedFaultType == 'شاشة') {
-      Provider.of<AppProvider>(context, listen: false)
-          .fetchSuggestedPricesForModel(_selectedBrand?.name, typedModel);
+    if (typedModel.isNotEmpty) {
+      Provider.of<InventoryProvider>(context, listen: false)
+          .fetchSuggestedPricesForModel(_selectedBrand?.name, typedModel, _selectedFaultType);
     } else {
-      Provider.of<AppProvider>(context, listen: false).clearSuggestedPrices();
+      Provider.of<InventoryProvider>(context, listen: false).clearSuggestedPrices();
     }
   }
 
@@ -148,8 +149,8 @@ class _IntakeTabState extends State<IntakeTab> {
   Future<void> _handleNewBrand() async {
     final newBrandName = await _showInputDialog('إضافة شركة جديدة', 'اسم الشركة (مثل: Xiaomi)');
     if (newBrandName != null && newBrandName.isNotEmpty) {
-      final provider = Provider.of<AppProvider>(context, listen: false);
-      final newBrand = await provider.addBrand(newBrandName.toUpperCase());
+      final inventoryProvider = Provider.of<InventoryProvider>(context, listen: false);
+      final newBrand = await inventoryProvider.addBrand(newBrandName.toUpperCase());
       setState(() {
         _selectedBrand = newBrand;
         _modelCtrl.clear();
@@ -188,12 +189,12 @@ class _IntakeTabState extends State<IntakeTab> {
     if (newPriceStr != null) {
       final newPrice = double.tryParse(newPriceStr);
       if (newPrice != null) {
-        Provider.of<AppProvider>(context, listen: false).updateQuickPrice(qp, newPrice);
+        Provider.of<InventoryProvider>(context, listen: false).updateQuickPrice(qp, newPrice);
       }
     }
   }
 
-  void _saveTicket() {
+  void _saveTicket() async {
     _unfocusAll();
     
     if (_selectedDeliveryDate == null) {
@@ -215,7 +216,7 @@ class _IntakeTabState extends State<IntakeTab> {
       }
 
       if (!_selectedBrand!.models.contains(typedModel)) {
-        Provider.of<AppProvider>(context, listen: false).addModelToBrand(_selectedBrand!, typedModel);
+        Provider.of<InventoryProvider>(context, listen: false).addModelToBrand(_selectedBrand!, typedModel);
       }
 
       final newTicket = MaintenanceTicket()
@@ -233,7 +234,12 @@ class _IntakeTabState extends State<IntakeTab> {
         ..isArchived = false
         ..syncStatus = 0;
 
-      Provider.of<AppProvider>(context, listen: false).addTicket(newTicket);
+      Provider.of<TicketProvider>(context, listen: false).addTicket(newTicket);
+
+      _lastSavedTicket = newTicket;
+
+      // طباعة النسخ بعد الحفظ الناجح (حوار اختيار وصل الزبون/المحل)
+      await _printTicket(newTicket);
 
       _formKey.currentState!.reset();
       _costCtrl.clear();
@@ -242,7 +248,7 @@ class _IntakeTabState extends State<IntakeTab> {
       _nameCtrl.clear();
       _phoneCtrl.clear();
 
-      Provider.of<AppProvider>(context, listen: false).currentSuggestedPrices.clear();
+      Provider.of<InventoryProvider>(context, listen: false).clearSuggestedPrices();
 
       setState(() {
         _selectedBrand = null;
@@ -255,6 +261,164 @@ class _IntakeTabState extends State<IntakeTab> {
     } else {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('يرجى إكمال البيانات المطلوبة')));
     }
+  }
+
+  Future<void> _printTicket(MaintenanceTicket ticket) async {
+    final settingsProvider = Provider.of<SettingsProvider>(context, listen: false);
+
+    // حوار اختيار نوع الطباعة
+    final printOptions = await showDialog<Map<String, bool>>(
+      context: context,
+      builder: (BuildContext context) {
+        bool printCustomer = true;
+        bool printDevice = true;
+
+        return StatefulBuilder(
+          builder: (context, setState) => AlertDialog(
+            title: const Text('اختيار الوصولات المراد طباعتها'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CheckboxListTile(
+                  title: const Text('وصل الزبون (مع الرقم التسلسلي)'),
+                  value: printCustomer,
+                  onChanged: (value) => setState(() => printCustomer = value ?? true),
+                ),
+                CheckboxListTile(
+                  title: const Text('وصل المحل (للصق على الجهاز)'),
+                  value: printDevice,
+                  onChanged: (value) => setState(() => printDevice = value ?? true),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(null),
+                child: const Text('إلغاء'),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.of(context).pop({
+                  'customer': printCustomer,
+                  'device': printDevice,
+                }),
+                child: const Text('طباعة'),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+
+    if (printOptions == null) return; // تم الإلغاء
+
+    // طباعة النسختين حسب الاختيار
+    if (printOptions['customer'] == true && printOptions['device'] == true) {
+      // طباعة كليهما
+      final result = await PrinterService.printBothCopies(
+        ticket: ticket,
+        macAddress: settingsProvider.printerMac,
+      );
+
+      if (!result['success']) {
+        _showPrintErrorDialog(result);
+      } else {
+        _showPrintSuccess(result['serialNumber']);
+      }
+    } else if (printOptions['customer'] == true) {
+      // طباعة وصل الزبون فقط
+      final result = await PrinterService.retryPrint(
+        ticket: ticket,
+        macAddress: settingsProvider.printerMac,
+        isCustomerCopy: true,
+      );
+
+      if (!result['success']) {
+        _showPrintErrorDialog(result);
+      } else {
+        _showPrintSuccess(result['serialNumber']);
+      }
+    } else if (printOptions['device'] == true) {
+      // طباعة وصل المحل فقط
+      final result = await PrinterService.retryPrint(
+        ticket: ticket,
+        macAddress: settingsProvider.printerMac,
+        isCustomerCopy: false,
+      );
+
+      if (!result['success']) {
+        _showPrintErrorDialog(result);
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('تمت طباعة وصل المحل بنجاح')),
+          );
+        }
+      }
+    }
+  }
+
+  void _showPrintErrorDialog(Map<String, dynamic> result) {
+    if (!mounted) return;
+
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('خطأ في الطباعة'),
+          content: Text(result['message']),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('تجاهل'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                Navigator.of(context).pop();
+                // إعادة المحاولة - سيتم إعادة فتح حوار الاختيار
+                // تم تعديل هذا السطر ليجلب التذكرة من TicketProvider بدلاً من AppProvider
+                final ticket = Provider.of<TicketProvider>(context, listen: false).tickets.first;
+                await _printTicket(ticket);
+              },
+              child: const Text('إعادة المحاولة'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _showPrintSuccess(int? serialNumber) {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('تمت الطباعة بنجاح${serialNumber != null ? ' - الرقم التسلسلي: $serialNumber' : ''}'),
+        duration: const Duration(seconds: 3),
+      ),
+    );
+  }
+
+  Future<void> _printSingleReceipt(MaintenanceTicket ticket, bool customerCopy) async {
+    final settingsProvider = Provider.of<SettingsProvider>(context, listen: false);
+    final result = await PrinterService.retryPrint(
+      ticket: ticket,
+      macAddress: settingsProvider.printerMac,
+      isCustomerCopy: customerCopy,
+    );
+
+    if (!mounted) return;
+
+    if (!result['success']) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('فشل الطباعة: ${result['message']}'),
+          backgroundColor: AppTheme.albaikRichRed,
+        ),
+      );
+      return;
+    }
+
+    _showPrintSuccess(result['serialNumber']);
   }
 
   void _showBrandPicker(BuildContext context) {
@@ -317,7 +481,8 @@ class _IntakeTabState extends State<IntakeTab> {
 
   @override
   Widget build(BuildContext context) {
-    final provider = Provider.of<AppProvider>(context);
+    // الاعتماد الأساسي هنا سيكون على InventoryProvider لبيانات الواجهة
+    final inventoryProvider = Provider.of<InventoryProvider>(context);
     final currentFaultData = _faultTypes.firstWhere((f) => f['name'] == _selectedFaultType, orElse: () => _faultTypes.last);
 
     bool isTodaySelected = _selectedDeliveryDate != null && DateFormat('yyyy-MM-dd').format(_selectedDeliveryDate!) == DateFormat('yyyy-MM-dd').format(DateTime.now());
@@ -387,7 +552,7 @@ class _IntakeTabState extends State<IntakeTab> {
                             return const Iterable<Map<String, dynamic>>.empty();
                           }
                           List<Map<String, dynamic>> allModels = [];
-                          for (var brand in provider.brands) {
+                          for (var brand in inventoryProvider.brands) {
                             for (var model in brand.models) {
                               allModels.add({'brand': brand, 'model': model});
                             }
@@ -558,23 +723,29 @@ class _IntakeTabState extends State<IntakeTab> {
 
                 const SizedBox(height: 24),
 
-                if (_selectedFaultType == 'شاشة' && provider.currentSuggestedPrices.isNotEmpty) ...[
+                if (inventoryProvider.currentSuggestedPrices.isNotEmpty) ...[
                   ListView.builder(
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
-                    itemCount: provider.currentSuggestedPrices.length,
+                    itemCount: inventoryProvider.currentSuggestedPrices.length,
                     itemBuilder: (ctx, index) {
-                      final sp = provider.currentSuggestedPrices[index];
+                      final sp = inventoryProvider.currentSuggestedPrices[index];
                       int normalPrice = (sp.price + (sp.price * 0.8)).ceil();
+                      
+                      // تمييز المخزون المحلي
+                      bool isLocalInventory = sp.supplierName.contains('المخزون المحلي');
 
                       return Container(
                         margin: const EdgeInsets.only(bottom: 12),
                         decoration: BoxDecoration(
-                          color: AppTheme.albaikPureWhite,
+                          color: isLocalInventory ? Colors.green.shade50 : AppTheme.albaikPureWhite,
                           borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: Colors.grey.shade200),
+                          border: Border.all(
+                            color: isLocalInventory ? Colors.green.shade400 : Colors.grey.shade200, 
+                            width: isLocalInventory ? 2 : 1
+                          ),
                           boxShadow: [
-                            BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 4, offset: const Offset(0, 2))
+                            BoxShadow(color: Colors.black.withValues(alpha: 0.02), blurRadius: 4, offset: const Offset(0, 2))
                           ],
                         ),
                         padding: const EdgeInsets.all(16.0),
@@ -585,10 +756,10 @@ class _IntakeTabState extends State<IntakeTab> {
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
                                 Expanded(
-                                  child: Text(sp.partQuality, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppTheme.albaikDeepNavy), overflow: TextOverflow.ellipsis),
+                                  child: Text(sp.partQuality, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: isLocalInventory ? Colors.green.shade800 : AppTheme.albaikDeepNavy), overflow: TextOverflow.ellipsis),
                                 ),
                                 const SizedBox(width: 8),
-                                Text('المورد: ${sp.supplierName}', style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                                Text(sp.supplierName, style: TextStyle(color: isLocalInventory ? Colors.green.shade800 : Colors.grey, fontSize: 12, fontWeight: isLocalInventory ? FontWeight.bold : FontWeight.normal)),
                               ],
                             ),
                             const SizedBox(height: 16),
@@ -597,7 +768,8 @@ class _IntakeTabState extends State<IntakeTab> {
                                 Expanded(
                                   child: OutlinedButton(
                                     style: OutlinedButton.styleFrom(
-                                      side: const BorderSide(color: AppTheme.albaikDeepNavy),
+                                      side: BorderSide(color: isLocalInventory ? Colors.green.shade700 : AppTheme.albaikDeepNavy),
+                                      foregroundColor: isLocalInventory ? Colors.green.shade700 : AppTheme.albaikDeepNavy,
                                       padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 2),
                                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                                     ),
@@ -608,7 +780,7 @@ class _IntakeTabState extends State<IntakeTab> {
                                     },
                                     child: FittedBox(
                                       fit: BoxFit.scaleDown,
-                                      child: Text('سعر الشاشة\n${sp.price}', textAlign: TextAlign.center, style: const TextStyle(fontSize: 13, height: 1.3, fontWeight: FontWeight.bold)),
+                                      child: Text('التكلفة عليك\n${sp.price}', textAlign: TextAlign.center, style: const TextStyle(fontSize: 13, height: 1.3, fontWeight: FontWeight.bold)),
                                     ),
                                   ),
                                 ),
@@ -616,7 +788,7 @@ class _IntakeTabState extends State<IntakeTab> {
                                 Expanded(
                                   child: ElevatedButton(
                                     style: ElevatedButton.styleFrom(
-                                      backgroundColor: AppTheme.albaikRichRed,
+                                      backgroundColor: isLocalInventory ? Colors.green.shade700 : AppTheme.albaikRichRed,
                                       padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 2),
                                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                                     ),
@@ -653,7 +825,7 @@ class _IntakeTabState extends State<IntakeTab> {
                   spacing: 10,
                   runSpacing: 10,
                   alignment: WrapAlignment.center,
-                  children: provider.quickPrices.map((qp) {
+                  children: inventoryProvider.quickPrices.map((qp) {
                     final bool isSelected = double.tryParse(_costCtrl.text) == qp.price;
                     final String displayPrice = qp.price % 1 == 0 ? qp.price.toInt().toString() : qp.price.toStringAsFixed(1);
 
@@ -737,6 +909,28 @@ class _IntakeTabState extends State<IntakeTab> {
                   onPressed: _saveTicket,
                   child: const Text('حفظ وإصدار التذكرة'),
                 ),
+
+                if (_lastSavedTicket != null) ...[
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () => _printSingleReceipt(_lastSavedTicket!, true),
+                          child: const Text('طباعة وصل الزبون'),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () => _printSingleReceipt(_lastSavedTicket!, false),
+                          child: const Text('طباعة وصل المحل'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+
                 const SizedBox(height: 24),
               ],
             ),

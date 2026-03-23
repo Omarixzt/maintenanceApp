@@ -3,10 +3,12 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import 'package:image_picker/image_picker.dart';
-import '../providers/app_provider.dart';
+import '../providers/ticket_provider.dart';
+import '../providers/settings_provider.dart';
 import '../models/app_models.dart';
 import '../theme/custom_app_bar.dart';
 import '../theme/app_theme.dart';
+import '../services/printer_service.dart';
 
 class WorkspaceTab extends StatefulWidget {
   const WorkspaceTab({Key? key}) : super(key: key);
@@ -61,7 +63,7 @@ class _WorkspaceTabState extends State<WorkspaceTab> {
   }
 
   // نافذة طلب الحسابات النهائية قبل الأرشفة
-  Future<void> _promptForArchiveDetails(BuildContext context, AppProvider provider, MaintenanceTicket ticket, String newStatus) async {
+  Future<void> _promptForArchiveDetails(BuildContext context, TicketProvider provider, MaintenanceTicket ticket, String newStatus) async {
     final finalCostCtrl = TextEditingController(text: ticket.expectedCost.toString());
     final partsCostCtrl = TextEditingController(text: '0');
     final formKey = GlobalKey<FormState>();
@@ -129,7 +131,7 @@ class _WorkspaceTabState extends State<WorkspaceTab> {
     }
   }
 
-  void _showTicketDetails(BuildContext context, AppProvider provider, MaintenanceTicket ticket) {
+  void _showTicketDetails(BuildContext context, TicketProvider provider, MaintenanceTicket ticket) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -236,7 +238,7 @@ class _WorkspaceTabState extends State<WorkspaceTab> {
               border: Border.all(color: path != null ? AppTheme.albaikRichRed : Colors.grey.shade300, width: 2),
               boxShadow: [
                 if (path != null)
-                  BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 8, offset: const Offset(0, 4)),
+                  BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 8, offset: const Offset(0, 4)),
               ],
             ),
             child: path != null
@@ -254,13 +256,13 @@ class _WorkspaceTabState extends State<WorkspaceTab> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, color: AppTheme.albaikDeepNavy.withOpacity(0.6), size: 24),
+          Icon(icon, color: AppTheme.albaikDeepNavy.withValues(alpha: 0.6), size: 24),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(label, style: TextStyle(color: AppTheme.albaikDeepNavy.withOpacity(0.6), fontSize: 12)),
+                Text(label, style: TextStyle(color: AppTheme.albaikDeepNavy.withValues(alpha: 0.6), fontSize: 12)),
                 const SizedBox(height: 4),
                 Text(
                   value,
@@ -278,7 +280,7 @@ class _WorkspaceTabState extends State<WorkspaceTab> {
     );
   }
 
-  Future<void> _handleStatusChange(BuildContext context, AppProvider provider, MaintenanceTicket ticket, String newStatus) async {
+  Future<void> _handleStatusChange(BuildContext context, TicketProvider provider, MaintenanceTicket ticket, String newStatus) async {
     if (newStatus == ticket.status) return;
 
     if (newStatus == 'Ready') {
@@ -318,7 +320,7 @@ class _WorkspaceTabState extends State<WorkspaceTab> {
 
   @override
   Widget build(BuildContext context) {
-    final provider = Provider.of<AppProvider>(context);
+    final provider = Provider.of<TicketProvider>(context);
     
     final filteredTickets = provider.tickets.where((t) {
       final query = _searchQuery.toLowerCase();
@@ -359,11 +361,11 @@ class _WorkspaceTabState extends State<WorkspaceTab> {
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(Icons.search_off_outlined, size: 80, color: AppTheme.albaikDeepNavy.withOpacity(0.1)),
+                          Icon(Icons.search_off_outlined, size: 80, color: AppTheme.albaikDeepNavy.withValues(alpha: 0.1)),
                           const SizedBox(height: 16),
                           Text(
                             _searchQuery.isEmpty ? 'الورشة فارغة حالياً' : 'لا توجد نتائج مطابقة لبحثك',
-                            style: TextStyle(color: AppTheme.albaikDeepNavy.withOpacity(0.5), fontSize: 16, fontWeight: FontWeight.bold),
+                            style: TextStyle(color: AppTheme.albaikDeepNavy.withValues(alpha: 0.5), fontSize: 16, fontWeight: FontWeight.bold),
                           ),
                         ],
                       ),
@@ -380,7 +382,7 @@ class _WorkspaceTabState extends State<WorkspaceTab> {
                           margin: const EdgeInsets.only(bottom: 16),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(20),
-                            side: BorderSide(color: AppTheme.albaikDeepNavy.withOpacity(0.1), width: 1.5),
+                            side: BorderSide(color: AppTheme.albaikDeepNavy.withValues(alpha: 0.1), width: 1.5),
                           ),
                           child: InkWell(
                             borderRadius: BorderRadius.circular(20),
@@ -420,12 +422,12 @@ class _WorkspaceTabState extends State<WorkspaceTab> {
                                       Expanded(
                                         child: Row(
                                           children: [
-                                            Icon(Icons.build_circle_outlined, size: 14, color: AppTheme.albaikDeepNavy.withOpacity(0.5)),
+                                            Icon(Icons.build_circle_outlined, size: 14, color: AppTheme.albaikDeepNavy.withValues(alpha: 0.5)),
                                             const SizedBox(width: 6),
                                             Flexible(
                                               child: Text(
                                                 ticket.faultDescription,
-                                                style: TextStyle(color: AppTheme.albaikDeepNavy.withOpacity(0.7), fontSize: 13),
+                                                style: TextStyle(color: AppTheme.albaikDeepNavy.withValues(alpha: 0.7), fontSize: 13),
                                                 maxLines: 1,
                                                 overflow: TextOverflow.ellipsis,
                                               ),
@@ -461,6 +463,36 @@ class _WorkspaceTabState extends State<WorkspaceTab> {
                                       ],
                                     ),
                                   ],
+
+                                  const SizedBox(height: 16),
+                                  // أزرار الطباعة
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: OutlinedButton.icon(
+                                          onPressed: () => _printCustomerReceipt(context, ticket),
+                                          icon: const Icon(Icons.receipt, size: 16),
+                                          label: const Text('وصل الزبون', style: TextStyle(fontSize: 12)),
+                                          style: OutlinedButton.styleFrom(
+                                            padding: const EdgeInsets.symmetric(vertical: 8),
+                                            side: const BorderSide(color: AppTheme.albaikDeepNavy),
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: OutlinedButton.icon(
+                                          onPressed: () => _printDeviceSticker(context, ticket),
+                                          icon: const Icon(Icons.label, size: 16),
+                                          label: const Text('وصل المحل', style: TextStyle(fontSize: 12)),
+                                          style: OutlinedButton.styleFrom(
+                                            padding: const EdgeInsets.symmetric(vertical: 8),
+                                            side: const BorderSide(color: AppTheme.albaikRichRed),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ],
                               ),
                             ),
@@ -475,7 +507,7 @@ class _WorkspaceTabState extends State<WorkspaceTab> {
     );
   }
 
-  Widget _buildStatusBadge(BuildContext context, MaintenanceTicket ticket, Map<String, dynamic> statusInfo, AppProvider provider) {
+  Widget _buildStatusBadge(BuildContext context, MaintenanceTicket ticket, Map<String, dynamic> statusInfo, TicketProvider provider) {
     return PopupMenuButton<String>(
       onSelected: (val) => _handleStatusChange(context, provider, ticket, val),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
@@ -492,9 +524,9 @@ class _WorkspaceTabState extends State<WorkspaceTab> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
-          color: statusInfo['color'].withOpacity(0.1),
+          color: (statusInfo['color'] as Color).withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: statusInfo['color'].withOpacity(0.2)),
+          border: Border.all(color: (statusInfo['color'] as Color).withValues(alpha: 0.2)),
         ),
         child: Row(
           children: [
@@ -507,5 +539,61 @@ class _WorkspaceTabState extends State<WorkspaceTab> {
         ),
       ),
     );
+  }
+
+  Future<void> _printCustomerReceipt(BuildContext context, MaintenanceTicket ticket) async {
+    final settingsProvider = Provider.of<SettingsProvider>(context, listen: false);
+
+    final result = await PrinterService.retryPrint(
+      ticket: ticket,
+      macAddress: settingsProvider.printerMac,
+      isCustomerCopy: true,
+    );
+
+    if (!context.mounted) return;
+
+    if (!result['success']) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('فشل في طباعة وصل الزبون: ${result['message']}'),
+          backgroundColor: AppTheme.albaikRichRed,
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('تمت طباعة وصل الزبون بنجاح - الرقم التسلسلي: ${result['serialNumber']}'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    }
+  }
+
+  Future<void> _printDeviceSticker(BuildContext context, MaintenanceTicket ticket) async {
+    final settingsProvider = Provider.of<SettingsProvider>(context, listen: false);
+
+    final result = await PrinterService.retryPrint(
+      ticket: ticket,
+      macAddress: settingsProvider.printerMac,
+      isCustomerCopy: false,
+    );
+
+    if (!context.mounted) return;
+
+    if (!result['success']) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('فشل في طباعة وصل المحل: ${result['message']}'),
+          backgroundColor: AppTheme.albaikRichRed,
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('تمت طباعة وصل المحل بنجاح'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    }
   }
 }
