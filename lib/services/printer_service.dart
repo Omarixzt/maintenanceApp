@@ -1,197 +1,322 @@
-import 'package:blue_thermal_printer/blue_thermal_printer.dart';
+import 'dart:convert';
+import 'dart:typed_data';
+import 'dart:ui' as ui;
+import 'dart:io';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
+import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
+import 'package:image/image.dart' as img_pkg;
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 import '../models/app_models.dart';
+import 'isar_service.dart';
+import '../theme/app_theme.dart'; 
 
 class PrinterService {
-  static final BlueThermalPrinter bluetooth = BlueThermalPrinter.instance;
+  static const double paperWidth = 384.0;
 
-  /// قراءة الشعار من ملف الأصول (تأكد من وجود المسار في pubspec.yaml)
-  static Future<Uint8List?> _loadLogo() async {
+  static Future<ui.Image?> _loadUiLogo() async {
     try {
+      String? customPath = await IsarService.getSetting('store_logo_path');
+      if (customPath != null && customPath.isNotEmpty) {
+        final File imgFile = File(customPath);
+        if (imgFile.existsSync()) {
+          final Uint8List bytes = await imgFile.readAsBytes();
+          return await decodeImageFromList(bytes);
+        }
+      }
       final ByteData data = await rootBundle.load('logo.png');
-      return data.buffer.asUint8List();
+      final Uint8List bytes = data.buffer.asUint8List();
+      return await decodeImageFromList(bytes);
     } catch (e) {
-      print('تحذير: لم يتم العثور على شعار في المسار logo.png');
+      debugPrint('تحذير: لم يتم العثور على الشعار');
       return null;
     }
   }
 
-  /// الحصول على الرقم التسلسلي المحلي وتحديثه
-  static Future<int> _getNextSerialNumber() async {
-    final prefs = await SharedPreferences.getInstance();
-    int current = prefs.getInt('serial_number') ?? 0;
-    int next = current + 1;
-    await prefs.setInt('serial_number', next);
-    return next;
+  static Future<Uint8List> _generateReceiptImageAsBytes(MaintenanceTicket ticket, bool isCustomerCopy) async {
+    String dateStr = DateFormat('yyyy-MM-dd hh:mm a').format(DateTime.now());
+    
+    String expectedDelivery = ticket.expectedDeliveryDate != null 
+        ? DateFormat('yyyy-MM-dd').format(DateTime.parse(ticket.expectedDeliveryDate!)) 
+        : DateFormat('yyyy-MM-dd').format(DateTime.now().add(const Duration(days: 3)));
+
+    String storeName = await IsarService.getSetting('store_name') ?? 'صيانة البيك';
+    String storeAddress = await IsarService.getSetting('store_address') ?? 'إربد - الأردن';
+    String storePhone = await IsarService.getSetting('store_phone') ?? '+962 7X XXX XXXX';
+
+    String? layoutJson = await IsarService.getSetting('receipt_layout');
+    List<dynamic> layout = layoutJson != null && layoutJson.isNotEmpty ? jsonDecode(layoutJson) : _getDefaultLayout();
+
+    double currentY = 10.0;
+    List<Function(Canvas)> drawCalls = [];
+
+    void drawText(String text, {double fontSize = 22, bool isBold = false, TextAlign align = TextAlign.right}) {
+      final span = TextSpan(
+        text: text,
+        style: TextStyle(
+          color: Colors.black,
+          fontSize: fontSize,
+          fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
+          fontFamily: 'Cairo', 
+        ),
+      );
+      final tp = TextPainter(text: span, textDirection: ui.TextDirection.rtl, textAlign: align);
+      tp.layout(maxWidth: paperWidth - 20);
+
+      double x = 10;
+      if (align == TextAlign.center) {
+        x = (paperWidth - tp.width) / 2;
+      } else if (align == TextAlign.left) {
+        x = 10;
+      } else {
+        x = paperWidth - tp.width - 10;
+      }
+
+      final y = currentY;
+      drawCalls.add((canvas) => tp.paint(canvas, Offset(x, y)));
+      currentY += tp.height + 8;
+    }
+
+    void drawDivider() {
+      currentY += 10;
+      final y = currentY;
+      drawCalls.add((canvas) {
+        canvas.drawLine(Offset(20, y), Offset(paperWidth - 20, y), Paint()..color = Colors.black..strokeWidth = 2);
+      });
+      currentY += 20;
+    }
+
+    for (var item in layout) {
+      // قراءة التفضيلات المخصصة لكل نوع وصل (للتوافق مع التعديلات الجديدة)
+      bool enabledForCustomer = item['isEnabledCustomer'] ?? item['isEnabled'] ?? true;
+      bool enabledForDevice = item['isEnabledDevice'] ?? item['isEnabled'] ?? true;
+
+      if (isCustomerCopy && !enabledForCustomer) continue;
+      if (!isCustomerCopy && !enabledForDevice) continue;
+
+      if (item['isCustom'] == true) {
+        String customText = item['customText'] ?? '';
+        if (customText.isNotEmpty) {
+          drawText(customText, align: TextAlign.center, isBold: true);
+          drawDivider();
+        }
+        continue;
+      }
+
+      switch (item['id']) {
+        case 'logo':
+          ui.Image? logo = await _loadUiLogo();
+          if (logo != null) {
+            final logoY = currentY;
+            final scaledWidth = 250.0;
+            final scaledHeight = (logo.height / logo.width) * scaledWidth;
+            final logoX = (paperWidth - scaledWidth) / 2;
+            
+            drawCalls.add((canvas) {
+              paintImage(canvas: canvas, rect: Rect.fromLTWH(logoX, logoY, scaledWidth, scaledHeight), image: logo, fit: BoxFit.contain);
+            });
+            currentY += scaledHeight + 15;
+          }
+          break;
+        case 'header':
+          drawText(storeName, align: TextAlign.center, isBold: true, fontSize: 32);
+          drawText(storeAddress, align: TextAlign.center, fontSize: 24);
+          drawDivider();
+          break;
+        case 'ticket_info':
+          drawText("رقم الوصل: #${ticket.isarId}", isBold: true);
+          drawText("التاريخ: $dateStr");
+          drawDivider();
+          break;
+        case 'delivery':
+          drawText("تاريخ التسليم المتوقع:");
+          drawText(expectedDelivery, isBold: true, align: TextAlign.center);
+          drawDivider();
+          break;
+        case 'customer':
+          drawText("معلومات الزبون:", isBold: true);
+          drawText("الاسم: ${ticket.customerName}");
+          drawText("الهاتف: ${ticket.phoneNumber}");
+          drawDivider();
+          break;
+        case 'device':
+          drawText("معلومات الجهاز:", isBold: true);
+          drawText("${ticket.deviceType} - ${ticket.deviceModel}");
+          currentY += 10;
+          drawText("وصف العطل:", isBold: true);
+          drawText(ticket.faultDescription);
+          drawDivider();
+          break;
+        case 'cost':
+          drawText("التكلفة المتوقعة: ${ticket.expectedCost} دينار", align: TextAlign.center, isBold: true, fontSize: 26);
+          drawDivider();
+          break;
+        case 'footer':
+          drawText("للتواصل: $storePhone", align: TextAlign.center);
+          currentY += 10;
+          drawText(isCustomerCopy ? "*** نسخة الزبون ***" : "*** ملصق الجهاز ***", align: TextAlign.center, isBold: true);
+          break;
+      }
+    }
+
+    currentY += 80;
+
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
+    canvas.drawRect(Rect.fromLTWH(0, 0, paperWidth, currentY), Paint()..color = Colors.white);
+    
+    for (var call in drawCalls) { call(canvas); }
+
+    final picture = recorder.endRecording();
+    final img = await picture.toImage(paperWidth.toInt(), currentY.toInt());
+    final byteData = await img.toByteData(format: ui.ImageByteFormat.png);
+    return byteData!.buffer.asUint8List();
   }
 
-  /// الدالة الأساسية للطباعة الاحترافية
   static Future<Map<String, dynamic>> printProfessionalTicket({
     required MaintenanceTicket ticket,
     required String macAddress,
     required bool isCustomerCopy,
   }) async {
+    Uint8List receiptImageBytes = await _generateReceiptImageAsBytes(ticket, isCustomerCopy);
+
     if (macAddress.isEmpty) {
-      return {'success': false, 'message': 'عنوان الطابعة غير مضبوط في الإعدادات'};
+      return {'success': false, 'message': 'عنوان الطابعة غير مضبوط', 'imageBytes': receiptImageBytes, 'ticketId': ticket.isarId.toString()};
     }
 
     try {
-      bool? isConnected = await bluetooth.isConnected;
-      if (isConnected == false) {
-        await bluetooth.connect(BluetoothDevice('Printer', macAddress));
+      bool isConnected = await PrintBluetoothThermal.connectionStatus;
+      if (!isConnected) {
+        bool connected = await PrintBluetoothThermal.connect(macPrinterAddress: macAddress);
+        if (!connected) return {'success': false, 'message': 'فشل الاتصال بالطابعة. تأكد من تشغيلها.', 'imageBytes': receiptImageBytes, 'ticketId': ticket.isarId.toString()};
       }
 
-      String shopName = "ALBAIK MAINTENANCE";
-      String dateStr = DateFormat('yyyy-MM-dd HH:mm').format(DateTime.now());
-      String ticketId = ticket.firebaseId?.substring(0, 8).toUpperCase() ?? 'N/A';
-      int serialNumber = await _getNextSerialNumber();
-      Uint8List? logoBytes = await _loadLogo();
+      final profile = await CapabilityProfile.load();
+      final generator = Generator(PaperSize.mm58, profile); 
+      List<int> bytes = [];
 
-      // --- بدء أوامر الطباعة ---
-      if (logoBytes != null) {
-        bluetooth.printImageBytes(logoBytes);
-        bluetooth.printNewLine();
-      }
+      final decodedImg = img_pkg.decodeImage(receiptImageBytes);
+      if (decodedImg != null) bytes.addAll(generator.imageRaster(decodedImg));
 
-      bluetooth.printCustom(shopName, 3, 1);
-      bluetooth.printCustom("Irbid - Jordan", 1, 1);
-      bluetooth.printNewLine();
-      bluetooth.printCustom("========================================", 1, 1);
-
-      bluetooth.printLeftRight("TICKET ID:", "#$ticketId", 1);
-      bluetooth.printLeftRight("DATE:", dateStr, 1);
-      
-      if (isCustomerCopy) {
-        bluetooth.printLeftRight("SERIAL NO:", "#$serialNumber", 1);
-      }
-      bluetooth.printCustom("----------------------------------------", 1, 1);
-
-      // استخدام التاريخ من التذكرة إن وجد، وإلا إضافة 3 أيام افتراضية
-      String expectedDelivery = ticket.expectedDeliveryDate ?? 
-          DateFormat('yyyy-MM-dd').format(DateTime.now().add(const Duration(days: 3)));
-      
-      bluetooth.printLeftRight("EXPECTED DELIVERY:", expectedDelivery, 1);
-      bluetooth.printCustom("========================================", 1, 1);
-
-      bluetooth.printCustom("========================================", 1, 1);
-
-      bluetooth.printLeftRight("CUSTOMER:", ticket.customerName.toUpperCase(), 1);
-      bluetooth.printLeftRight("PHONE:", ticket.phoneNumber, 1);
-      bluetooth.printNewLine();
-
-      bluetooth.printCustom("DEVICE INFO:", 1, 0);
-      bluetooth.printCustom("${ticket.deviceType} - ${ticket.deviceModel}", 1, 0);
-      bluetooth.printNewLine();
-
-      bluetooth.printCustom("FAULT DESCRIPTION:", 1, 0);
-      bluetooth.printCustom(ticket.faultDescription, 0, 0);
-      bluetooth.printNewLine();
-
-      bluetooth.printCustom("----------------------------------------", 1, 1);
-
-      // إضافة سعر التكلفة لكلا الوصلين
-      bluetooth.printLeftRight("EXPECTED COST:", "${ticket.expectedCost} JOD", 1);
-      bluetooth.printNewLine();
-
-      // إزالة QR Code، ضمان 30 يوم، رسالة شكر وتعليمة للصق
-      bluetooth.printCustom("========================================", 1, 1);
-      bluetooth.printCustom("CONTACT: +962 7X XXX XXXX", 1, 1);
-      
-      if (isCustomerCopy) {
-        bluetooth.printCustom("CUSTOMER COPY", 1, 1);
-      } else {
-        bluetooth.printCustom("DEVICE STICKER", 1, 1);
-      }
-
-      bluetooth.printNewLine();
-      bluetooth.printNewLine();
-      bluetooth.paperCut();
-
-      return {'success': true, 'message': 'تمت الطباعة بنجاح', 'serialNumber': serialNumber};
+      await PrintBluetoothThermal.writeBytes(bytes);
+      return {'success': true, 'message': 'تمت الطباعة بنجاح', 'serialNumber': ticket.isarId, 'imageBytes': receiptImageBytes};
     } catch (e) {
-      return {'success': false, 'message': 'فشل الاتصال بالطابعة: $e'};
+      return {'success': false, 'message': 'حدث خطأ: $e', 'imageBytes': receiptImageBytes, 'ticketId': ticket.isarId.toString()};
     }
   }
 
-  /// دالة طباعة النسختين معاً
-static Future<Map<String, dynamic>> printBothCopies({
-    required MaintenanceTicket ticket,
-    required String macAddress,
-  }) async {
-    // 1. طباعة نسخة العميل أولاً
-    var customerResult = await printProfessionalTicket(
-      ticket: ticket,
-      macAddress: macAddress,
-      isCustomerCopy: true,
-    );
-
-    if (!customerResult['success']) return customerResult;
-
-    // 2. التحقق الفعلي من حالة الطابعة قبل إرسال الأمر الثاني
-    try {
-      bool? isConnected = await bluetooth.isConnected;
-      if (isConnected == false) {
-        await bluetooth.connect(BluetoothDevice('Printer', macAddress));
-      }
-    } catch (e) {
-      return {
-        'success': false,
-        'message': 'انقطع الاتصال بالطابعة قبل طباعة نسخة الجهاز: $e',
-        'customerPrinted': true,
-        'serialNumber': customerResult['serialNumber'],
-      };
-    }
-
-    // 3. طباعة نسخة الجهاز
-    var deviceResult = await printProfessionalTicket(
-      ticket: ticket,
-      macAddress: macAddress,
-      isCustomerCopy: false,
-    );
-
-    if (!deviceResult['success']) {
-      return {
-        'success': false,
-        'message': 'فشلت نسخة الجهاز: ${deviceResult['message']}',
-        'customerPrinted': true,
-        'serialNumber': customerResult['serialNumber'],
-      };
-    }
-
-    return {
-      'success': true,
-      'message': 'تمت طباعة النسختين بنجاح',
-      'serialNumber': customerResult['serialNumber'],
-    };
-  }
-  
-  /// إعادة محاولة الطباعة
-  static Future<Map<String, dynamic>> retryPrint({
+  static Future<void> printWithFallbackDialog({
+    required BuildContext context,
     required MaintenanceTicket ticket,
     required String macAddress,
     required bool isCustomerCopy,
   }) async {
-    return await printProfessionalTicket(
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('جاري معالجة الفاتورة...')));
+    
+    var result = await printProfessionalTicket(
       ticket: ticket,
       macAddress: macAddress,
       isCustomerCopy: isCustomerCopy,
     );
+
+    if (!context.mounted) return;
+
+    if (result['success']) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('تمت الطباعة بنجاح - وصل #${result['serialNumber']}'), backgroundColor: Colors.green),
+      );
+    } else {
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.print_disabled, color: AppTheme.albaikRichRed),
+              SizedBox(width: 8),
+              Text('تعذر الطباعة', style: TextStyle(color: AppTheme.albaikRichRed, fontWeight: FontWeight.bold)),
+            ],
+          ),
+          content: Text('${result['message']}\n\nهل تريد مشاركة الفاتورة أو حفظها كصورة في جهازك؟'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx), 
+              child: const Text('إلغاء', style: TextStyle(color: Colors.grey))
+            ),
+            ElevatedButton.icon(
+              icon: const Icon(Icons.share),
+              label: const Text('مشاركة / حفظ'),
+              style: ElevatedButton.styleFrom(backgroundColor: AppTheme.albaikDeepNavy),
+              onPressed: () async {
+                Navigator.pop(ctx);
+                await shareReceiptImage(result['imageBytes'], ticket.isarId.toString());
+              },
+            )
+          ],
+        ),
+      );
+    }
   }
 
-  /// اختبار الطابعة
+  static Future<void> generateAndShareReceiptDirectly({
+    required BuildContext context,
+    required MaintenanceTicket ticket,
+    required bool isCustomerCopy,
+  }) async {
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('جاري تجهيز الفاتورة كصورة...')));
+    try {
+      Uint8List imageBytes = await _generateReceiptImageAsBytes(ticket, isCustomerCopy);
+      await shareReceiptImage(imageBytes, ticket.isarId.toString());
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('فشل تجهيز الصورة: $e'), backgroundColor: Colors.red)
+        );
+      }
+    }
+  }
+
+  static Future<void> shareReceiptImage(Uint8List imageBytes, String ticketId) async {
+    try {
+      final tempDir = await getTemporaryDirectory();
+      final file = await File('${tempDir.path}/receipt_$ticketId.png').create();
+      await file.writeAsBytes(imageBytes);
+      await Share.shareXFiles([XFile(file.path)], text: 'فاتورة صيانة - وصل رقم $ticketId');
+    } catch (e) {
+      debugPrint('خطأ في مشاركة الصورة: $e');
+    }
+  }
+
+  static List<Map<String, dynamic>> _getDefaultLayout() {
+    return [
+      {'id': 'logo', 'isEnabledCustomer': true, 'isEnabledDevice': false, 'isCustom': false},
+      {'id': 'header', 'isEnabledCustomer': true, 'isEnabledDevice': true, 'isCustom': false},
+      {'id': 'ticket_info', 'isEnabledCustomer': true, 'isEnabledDevice': true, 'isCustom': false},
+      {'id': 'delivery', 'isEnabledCustomer': true, 'isEnabledDevice': false, 'isCustom': false},
+      {'id': 'customer', 'isEnabledCustomer': true, 'isEnabledDevice': true, 'isCustom': false},
+      {'id': 'device', 'isEnabledCustomer': true, 'isEnabledDevice': true, 'isCustom': false},
+      {'id': 'cost', 'isEnabledCustomer': true, 'isEnabledDevice': false, 'isCustom': false},
+      {'id': 'footer', 'isEnabledCustomer': true, 'isEnabledDevice': false, 'isCustom': false},
+    ];
+  }
+
   static Future<void> testPrinter(String macAddress) async {
     try {
-      if (await bluetooth.isConnected == false) {
-        await bluetooth.connect(BluetoothDevice('Test', macAddress));
-      }
-      bluetooth.printCustom("ALBAIK MAINTENANCE", 3, 1);
-      bluetooth.printCustom("PRINTER TEST SUCCESSFUL", 1, 1);
-      bluetooth.printNewLine();
-      bluetooth.paperCut();
+      bool isConnected = await PrintBluetoothThermal.connectionStatus;
+      if (!isConnected) await PrintBluetoothThermal.connect(macPrinterAddress: macAddress);
+
+      final profile = await CapabilityProfile.load();
+      final generator = Generator(PaperSize.mm58, profile);
+      List<int> bytes = [];
+
+      bytes.addAll(generator.text("PRINTER TEST SUCCESSFUL", styles: const PosStyles(align: PosAlign.center, bold: true)));
+      bytes.addAll(generator.emptyLines(3));
+      
+      await PrintBluetoothThermal.writeBytes(bytes);
     } catch (e) {
-      print("خطأ في اختبار الطابعة: $e");
+      debugPrint("خطأ في اختبار الطابعة: $e");
     }
   }
 }

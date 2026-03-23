@@ -9,6 +9,9 @@ class MaintenanceTicket {
   @Index(unique: true)
   String? firebaseId;
 
+  @Index()
+  String shopId = ''; // <-- المعرف الخاص بالمحل (كود التفعيل) لضمان عزل البيانات
+
   String customerName = '';
   String phoneNumber = '';
   String deviceType = '';
@@ -35,6 +38,7 @@ class MaintenanceTicket {
   Map<String, dynamic> toMap() {
     return {
       'firebaseId': firebaseId,
+      'shopId': shopId, // إرسال كود المحل إلى السحابة
       'customerName': customerName,
       'phoneNumber': phoneNumber,
       'deviceType': deviceType,
@@ -58,6 +62,7 @@ class MaintenanceTicket {
   static MaintenanceTicket fromMap(Map<String, dynamic> map) {
     return MaintenanceTicket()
       ..firebaseId = map['firebaseId'] as String?
+      ..shopId = map['shopId'] as String? ?? '' // استلام كود المحل من السحابة
       ..customerName = map['customerName'] as String? ?? ''
       ..phoneNumber = map['phoneNumber'] as String? ?? ''
       ..deviceType = map['deviceType'] as String? ?? ''
@@ -81,8 +86,13 @@ class MaintenanceTicket {
 @collection
 class LocalPart {
   Id isarId = Isar.autoIncrement;
+  
   @Index(unique: true)
   String? partId;
+
+  @Index()
+  String shopId = ''; // <-- المعرف الخاص بالمحل (كود التفعيل)
+
   String partName = '';
   String deviceBrand = '';
   String deviceModel = '';
@@ -100,6 +110,7 @@ class LocalPart {
   Map<String, dynamic> toMap() {
     return {
       'partId': partId,
+      'shopId': shopId, // إرسال كود المحل إلى السحابة
       'partName': partName,
       'deviceBrand': deviceBrand,
       'deviceModel': deviceModel,
@@ -115,6 +126,7 @@ class LocalPart {
   static LocalPart fromMap(Map<String, dynamic> map) {
     return LocalPart()
       ..partId = map['partId']
+      ..shopId = map['shopId'] as String? ?? '' // استلام كود المحل من السحابة
       ..partName = map['partName'] ?? ''
       ..deviceBrand = map['deviceBrand'] ?? ''
       ..deviceModel = map['deviceModel'] ?? ''

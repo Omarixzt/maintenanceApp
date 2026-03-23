@@ -2,16 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:workmanager/workmanager.dart'; // <-- إضافة حزمة المزامنة بالخلفية
-import 'package:isar/isar.dart'; // <-- إضافة Isar للتعامل مع الفلاتر في الخلفية
+import 'package:workmanager/workmanager.dart'; 
+import 'package:isar/isar.dart'; 
 import 'firebase_options.dart';
 import 'services/isar_service.dart';
-import '../providers/ticket_provider.dart';
-import '../providers/inventory_provider.dart';
-import '../providers/settings_provider.dart';
+import 'providers/ticket_provider.dart';
+import 'providers/inventory_provider.dart';
+import 'providers/settings_provider.dart';
+import 'providers/auth_provider.dart'; // <-- استدعاء مزود المصادقة الجديد
 import 'screens/main_navigation_screen.dart';
+import 'screens/login_screen.dart'; // <-- استدعاء شاشة تسجيل الدخول
 import 'theme/app_theme.dart';
-import 'models/app_models.dart'; // <-- تأكد من المسار للوصول إلى MaintenanceTicket
+import 'models/app_models.dart'; 
 
 // 1. الدالة المعزولة للعمل في الخلفية (يجب أن تكون خارج أي كلاس)
 @pragma('vm:entry-point')
@@ -33,7 +35,8 @@ void callbackDispatcher() {
 
       // رفع التذاكر للسحابة وتحديث حالتها محلياً
       for (var ticket in pendingTickets) {
-        if (ticket.firebaseId != null && ticket.firebaseId!.isNotEmpty) {
+        // التأكد من وجود كود المحل والـ ID قبل الرفع
+        if (ticket.firebaseId != null && ticket.firebaseId!.isNotEmpty && ticket.shopId.isNotEmpty) {
           await FirebaseFirestore.instance
               .collection('maintenance_tickets')
               .doc(ticket.firebaseId)
@@ -86,6 +89,7 @@ void main() async {
   runApp(
     MultiProvider(
       providers: [
+        ChangeNotifierProvider(create: (_) => AuthProvider()), // <-- تسجيل مزود المصادقة أولاً ليعمل قبل الجميع
         ChangeNotifierProvider(create: (_) => TicketProvider()),
         ChangeNotifierProvider(create: (_) => InventoryProvider()),
         ChangeNotifierProvider(create: (_) => SettingsProvider()),
@@ -101,10 +105,34 @@ class MobileMaintenanceApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Albaik Maintenance',
+      title: 'نظام الصيانة',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
-      home: const MainNavigationScreen(),
+      locale: const Locale('ar', 'JO'), // لضمان دعم الواجهة العربية
+      builder: (context, child) {
+        return Directionality(
+          textDirection: TextDirection.rtl,
+          child: child!,
+        );
+      },
+      // توجيه ذكي بناءً على حالة كود التفعيل
+      home: Consumer<AuthProvider>(
+        builder: (context, auth, _) {
+          // أثناء التحقق من الذاكرة المحلية أو السيرفر
+          if (auth.isChecking) {
+            return const Scaffold(
+              body: Center(child: CircularProgressIndicator()),
+            );
+          }
+          // التعديل هنا: نطرده إذا كان المتغير null أو نص فارغ
+          if (auth.currentShopId == null || auth.currentShopId!.trim().isEmpty) {
+            return const LoginScreen();
+          }
+          // إذا كان يملك كوداً (سواء ساري أو منتهي)، يدخل للتطبيق
+          // (سيتم التعامل مع وضع القراءة فقط داخل MainNavigationScreen)
+          return const MainNavigationScreen();
+        },
+      ),
     );
   }
 }

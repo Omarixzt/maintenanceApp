@@ -11,10 +11,10 @@ import '../theme/app_theme.dart';
 import '../theme/custom_app_bar.dart';
 import '../theme/app_animations.dart';
 
-// استدعاء الملفات الجديدة
 import 'intake_pickers.dart';
 import 'intake_components.dart';
 import '../services/printer_service.dart';
+import '../services/isar_service.dart';
 
 class IntakeTab extends StatefulWidget {
   const IntakeTab({Key? key}) : super(key: key);
@@ -135,10 +135,10 @@ class _IntakeTabState extends State<IntakeTab> {
     _unfocusAll();
     final XFile? photo = await _picker.pickImage(
       source: ImageSource.camera,
-      imageQuality: 50,      // تقليل الجودة لـ 50%
-      maxWidth: 1080,        // تحديد أقصى عرض
-      maxHeight: 1080,       // تحديد أقصى ارتفاع
-      );
+      imageQuality: 50,
+      maxWidth: 1080,
+      maxHeight: 1080,
+    );
     if (photo != null) {
       setState(() {
         _deviceImageFile = File(photo.path);
@@ -238,7 +238,6 @@ class _IntakeTabState extends State<IntakeTab> {
 
       _lastSavedTicket = newTicket;
 
-      // طباعة النسخ بعد الحفظ الناجح (حوار اختيار وصل الزبون/المحل)
       await _printTicket(newTicket);
 
       _formKey.currentState!.reset();
@@ -266,7 +265,7 @@ class _IntakeTabState extends State<IntakeTab> {
   Future<void> _printTicket(MaintenanceTicket ticket) async {
     final settingsProvider = Provider.of<SettingsProvider>(context, listen: false);
 
-    // حوار اختيار نوع الطباعة
+    // حوار التخيير الذي تم استعادته
     final printOptions = await showDialog<Map<String, bool>>(
       context: context,
       builder: (BuildContext context) {
@@ -280,23 +279,26 @@ class _IntakeTabState extends State<IntakeTab> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 CheckboxListTile(
-                  title: const Text('وصل الزبون (مع الرقم التسلسلي)'),
+                  title: const Text('وصل الزبون'),
                   value: printCustomer,
                   onChanged: (value) => setState(() => printCustomer = value ?? true),
+                  activeColor: AppTheme.albaikRichRed,
                 ),
                 CheckboxListTile(
                   title: const Text('وصل المحل (للصق على الجهاز)'),
                   value: printDevice,
                   onChanged: (value) => setState(() => printDevice = value ?? true),
+                  activeColor: AppTheme.albaikRichRed,
                 ),
               ],
             ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.of(context).pop(null),
-                child: const Text('إلغاء'),
+                child: const Text('تخطي الطباعة', style: TextStyle(color: Colors.grey)),
               ),
               ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: AppTheme.albaikDeepNavy),
                 onPressed: () => Navigator.of(context).pop({
                   'customer': printCustomer,
                   'device': printDevice,
@@ -309,116 +311,29 @@ class _IntakeTabState extends State<IntakeTab> {
       },
     );
 
-    if (printOptions == null) return; // تم الإلغاء
+    if (printOptions == null) return; 
 
-    // طباعة النسختين حسب الاختيار
-    if (printOptions['customer'] == true && printOptions['device'] == true) {
-      // طباعة كليهما
-      final result = await PrinterService.printBothCopies(
-        ticket: ticket,
-        macAddress: settingsProvider.printerMac,
-      );
-
-      if (!result['success']) {
-        _showPrintErrorDialog(result);
-      } else {
-        _showPrintSuccess(result['serialNumber']);
-      }
-    } else if (printOptions['customer'] == true) {
-      // طباعة وصل الزبون فقط
-      final result = await PrinterService.retryPrint(
+    if (printOptions['customer'] == true) {
+      await PrinterService.printWithFallbackDialog(
+        context: context,
         ticket: ticket,
         macAddress: settingsProvider.printerMac,
         isCustomerCopy: true,
       );
-
-      if (!result['success']) {
-        _showPrintErrorDialog(result);
-      } else {
-        _showPrintSuccess(result['serialNumber']);
+      
+      if (printOptions['device'] == true) {
+        await Future.delayed(const Duration(seconds: 3));
       }
-    } else if (printOptions['device'] == true) {
-      // طباعة وصل المحل فقط
-      final result = await PrinterService.retryPrint(
+    }
+
+    if (printOptions['device'] == true) {
+      await PrinterService.printWithFallbackDialog(
+        context: context,
         ticket: ticket,
         macAddress: settingsProvider.printerMac,
         isCustomerCopy: false,
       );
-
-      if (!result['success']) {
-        _showPrintErrorDialog(result);
-      } else {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('تمت طباعة وصل المحل بنجاح')),
-          );
-        }
-      }
     }
-  }
-
-  void _showPrintErrorDialog(Map<String, dynamic> result) {
-    if (!mounted) return;
-
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('خطأ في الطباعة'),
-          content: Text(result['message']),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('تجاهل'),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                Navigator.of(context).pop();
-                // إعادة المحاولة - سيتم إعادة فتح حوار الاختيار
-                // تم تعديل هذا السطر ليجلب التذكرة من TicketProvider بدلاً من AppProvider
-                final ticket = Provider.of<TicketProvider>(context, listen: false).tickets.first;
-                await _printTicket(ticket);
-              },
-              child: const Text('إعادة المحاولة'),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  void _showPrintSuccess(int? serialNumber) {
-    if (!mounted) return;
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('تمت الطباعة بنجاح${serialNumber != null ? ' - الرقم التسلسلي: $serialNumber' : ''}'),
-        duration: const Duration(seconds: 3),
-      ),
-    );
-  }
-
-  Future<void> _printSingleReceipt(MaintenanceTicket ticket, bool customerCopy) async {
-    final settingsProvider = Provider.of<SettingsProvider>(context, listen: false);
-    final result = await PrinterService.retryPrint(
-      ticket: ticket,
-      macAddress: settingsProvider.printerMac,
-      isCustomerCopy: customerCopy,
-    );
-
-    if (!mounted) return;
-
-    if (!result['success']) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('فشل الطباعة: ${result['message']}'),
-          backgroundColor: AppTheme.albaikRichRed,
-        ),
-      );
-      return;
-    }
-
-    _showPrintSuccess(result['serialNumber']);
   }
 
   void _showBrandPicker(BuildContext context) {
@@ -481,8 +396,8 @@ class _IntakeTabState extends State<IntakeTab> {
 
   @override
   Widget build(BuildContext context) {
-    // الاعتماد الأساسي هنا سيكون على InventoryProvider لبيانات الواجهة
     final inventoryProvider = Provider.of<InventoryProvider>(context);
+    final settingsProvider = Provider.of<SettingsProvider>(context, listen: false);
     final currentFaultData = _faultTypes.firstWhere((f) => f['name'] == _selectedFaultType, orElse: () => _faultTypes.last);
 
     bool isTodaySelected = _selectedDeliveryDate != null && DateFormat('yyyy-MM-dd').format(_selectedDeliveryDate!) == DateFormat('yyyy-MM-dd').format(DateTime.now());
@@ -732,7 +647,6 @@ class _IntakeTabState extends State<IntakeTab> {
                       final sp = inventoryProvider.currentSuggestedPrices[index];
                       int normalPrice = (sp.price + (sp.price * 0.8)).ceil();
                       
-                      // تمييز المخزون المحلي
                       bool isLocalInventory = sp.supplierName.contains('المخزون المحلي');
 
                       return Container(
@@ -911,20 +825,85 @@ class _IntakeTabState extends State<IntakeTab> {
                 ),
 
                 if (_lastSavedTicket != null) ...[
+                  const SizedBox(height: 24),
+                  const Divider(),
                   const SizedBox(height: 16),
+                  
+                  // أزرار الطباعة والمشاركة المستقلة لوصل الزبون
                   Row(
                     children: [
                       Expanded(
-                        child: OutlinedButton(
-                          onPressed: () => _printSingleReceipt(_lastSavedTicket!, true),
-                          child: const Text('طباعة وصل الزبون'),
+                        flex: 4,
+                        child: OutlinedButton.icon(
+                          onPressed: () => PrinterService.printWithFallbackDialog(
+                            context: context,
+                            ticket: _lastSavedTicket!,
+                            macAddress: settingsProvider.printerMac,
+                            isCustomerCopy: true,
+                          ),
+                          icon: const Icon(Icons.print, size: 16),
+                          label: const Text('طباعة وصل الزبون', style: TextStyle(fontSize: 12)),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            side: const BorderSide(color: AppTheme.albaikDeepNavy),
+                          ),
                         ),
                       ),
                       const SizedBox(width: 8),
                       Expanded(
+                        flex: 1,
                         child: OutlinedButton(
-                          onPressed: () => _printSingleReceipt(_lastSavedTicket!, false),
-                          child: const Text('طباعة وصل المحل'),
+                          style: OutlinedButton.styleFrom(
+                            padding: EdgeInsets.zero,
+                            side: BorderSide(color: AppTheme.albaikDeepNavy.withValues(alpha: 0.5)),
+                          ),
+                          onPressed: () => PrinterService.generateAndShareReceiptDirectly(
+                            context: context,
+                            ticket: _lastSavedTicket!,
+                            isCustomerCopy: true,
+                          ),
+                          child: const Icon(Icons.share, color: AppTheme.albaikDeepNavy, size: 20),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  
+                  // أزرار الطباعة والمشاركة المستقلة لملصق الجهاز
+                  Row(
+                    children: [
+                      Expanded(
+                        flex: 4,
+                        child: OutlinedButton.icon(
+                          onPressed: () => PrinterService.printWithFallbackDialog(
+                            context: context,
+                            ticket: _lastSavedTicket!,
+                            macAddress: settingsProvider.printerMac,
+                            isCustomerCopy: false,
+                          ),
+                          icon: const Icon(Icons.label_outline, size: 16),
+                          label: const Text('طباعة ملصق الجهاز', style: TextStyle(fontSize: 12)),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            foregroundColor: AppTheme.albaikRichRed,
+                            side: const BorderSide(color: AppTheme.albaikRichRed),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        flex: 1,
+                        child: OutlinedButton(
+                          style: OutlinedButton.styleFrom(
+                            padding: EdgeInsets.zero,
+                            side: BorderSide(color: AppTheme.albaikRichRed.withValues(alpha: 0.5)),
+                          ),
+                          onPressed: () => PrinterService.generateAndShareReceiptDirectly(
+                            context: context,
+                            ticket: _lastSavedTicket!,
+                            isCustomerCopy: false,
+                          ),
+                          child: const Icon(Icons.share, color: AppTheme.albaikRichRed, size: 20),
                         ),
                       ),
                     ],

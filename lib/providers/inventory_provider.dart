@@ -15,8 +15,15 @@ class InventoryProvider extends ChangeNotifier {
   }
 
   Future<void> _loadInventoryData() async {
-    // تحميل القطع غير المحذوفة فقط
-    inventory = await IsarService.db.localParts.filter().isDeletedEqualTo(false).findAll();
+    String? shopId = await IsarService.getSetting('active_shop_id');
+    
+    // تحميل القطع الخاصة بهذا المحل فقط وغير المحذوفة
+    inventory = await IsarService.db.localParts
+        .filter()
+        .shopIdEqualTo(shopId ?? '')
+        .isDeletedEqualTo(false)
+        .findAll();
+        
     brands = await IsarService.db.deviceBrands.where().findAll();
     
     if (brands.isEmpty) {
@@ -96,12 +103,15 @@ class InventoryProvider extends ChangeNotifier {
   // --- دوال إدارة قطع المخزون بذكاء المزامنة ---
   
   Future<void> addInventoryPart(LocalPart part) async {
+    String? shopId = await IsarService.getSetting('active_shop_id');
+    part.shopId = shopId ?? ''; // ختم القطعة برقم المحل
     part.syncStatus = 0;
     part.updatedAt = DateTime.now().millisecondsSinceEpoch;
+    
     await IsarService.db.writeTxn(() async => await IsarService.db.localParts.put(part));
     inventory.insert(0, part);
     notifyListeners();
-    syncInventoryWithCloud(); // محاولة المزامنة الفورية بالخلفية
+    syncInventoryWithCloud(); 
   }
 
   Future<void> updateInventoryPart(LocalPart part) async {
@@ -118,7 +128,6 @@ class InventoryProvider extends ChangeNotifier {
   }
 
   Future<void> deleteInventoryPart(LocalPart part) async {
-    // حذف ناعم: إخفاء القطعة محلياً وجدولة حذفها سحابياً
     part.isDeleted = true;
     part.syncStatus = 0;
     part.updatedAt = DateTime.now().millisecondsSinceEpoch;
@@ -141,13 +150,16 @@ class InventoryProvider extends ChangeNotifier {
     return true;
   }
 
-  // --- الدالة الذكية للمزامنة (Delta Sync & Batch Writes) ---
+  // --- الدالة الذكية للمزامنة (تم التحديث لتدعم SaaS) ---
   Future<String> syncInventoryWithCloud() async {
     try {
+      String? shopId = await IsarService.getSetting('active_shop_id');
+      if (shopId == null || shopId.isEmpty) return "يرجى تسجيل الدخول أولاً.";
+
       final isar = IsarService.db;
 
-      // 1. رفع التعديلات المحلية (Batch Writes لتقليل استهلاك الكتابة)
-      final pendingParts = await isar.localParts.filter().syncStatusEqualTo(0).findAll();
+      // 1. رفع التعديلات المحلية الخاصة بهذا المحل فقط
+      final pendingParts = await isar.localParts.filter().shopIdEqualTo(shopId).syncStatusEqualTo(0).findAll();
       int uploadedCount = 0;
       
       for (var part in pendingParts) {
@@ -155,8 +167,8 @@ class InventoryProvider extends ChangeNotifier {
         final docRef = FirebaseFirestore.instance.collection('local_inventory').doc(part.partId);
 
         if (part.isDeleted) {
-          await docRef.delete(); // حذف من السحابة نهائياً
-          await isar.writeTxn(() async => await isar.localParts.delete(part.isarId)); // تنظيف محلي
+          await docRef.delete(); 
+          await isar.writeTxn(() async => await isar.localParts.delete(part.isarId)); 
         } else {
           await docRef.set(part.toMap(), SetOptions(merge: true));
           part.syncStatus = 1;
@@ -165,12 +177,13 @@ class InventoryProvider extends ChangeNotifier {
         uploadedCount++;
       }
 
-      // 2. سحب التعديلات السحابية الجديدة فقط (Delta Fetch لتقليل القراءات)
-      final lastSyncedPart = await isar.localParts.where().sortByUpdatedAtDesc().findFirst();
+      // 2. سحب التعديلات السحابية الخاصة بهذا المحل فقط
+      final lastSyncedPart = await isar.localParts.filter().shopIdEqualTo(shopId).sortByUpdatedAtDesc().findFirst();
       int lastSyncTime = lastSyncedPart?.updatedAt ?? 0;
 
       final snapshot = await FirebaseFirestore.instance
           .collection('local_inventory')
+          .where('shopId', isEqualTo: shopId) // <--- التعديل الجوهري هنا
           .where('updatedAt', isGreaterThan: lastSyncTime)
           .get();
 
@@ -191,17 +204,17 @@ class InventoryProvider extends ChangeNotifier {
       });
 
       if (downloadedCount > 0) {
-        inventory = await isar.localParts.filter().isDeletedEqualTo(false).findAll();
+        inventory = await isar.localParts.filter().shopIdEqualTo(shopId).isDeletedEqualTo(false).findAll();
         notifyListeners();
       }
 
       if (uploadedCount == 0 && downloadedCount == 0) {
         return "المخزون محدث بالكامل.";
       }
-      return "تمت المزامنة: رفع ($uploadedCount)، تنزيل ($downloadedCount).";
+      return "تمت المزامنة بنجاح.";
     } catch (e) {
       debugPrint("خطأ في مزامنة المخزون: $e");
-      return "فشلت المزامنة. سيتم المحاولة لاحقاً.";
+      return "فشلت المزامنة. تأكد من اتصال الإنترنت.";
     }
   }
 
@@ -217,7 +230,6 @@ class InventoryProvider extends ChangeNotifier {
       String localBrand = (brandName ?? '').trim().toUpperCase();
       String localModel = typedModel.trim().toUpperCase();
 
-      // 1. ترتيب أسعار الموردين
       for (var sp in allPrices) {
         String dbModel = sp.deviceModel.trim().toUpperCase();
         String dbBrand = sp.deviceBrand.trim().toUpperCase();
@@ -246,7 +258,6 @@ class InventoryProvider extends ChangeNotifier {
       List<SupplierPrice> finalPrices = uniquePrices.values.toList();
       finalPrices.sort((a, b) => a.price.compareTo(b.price));
 
-      // 2. البحث في المخزون المحلي المطابق للموديل ونوع العطل
       final localMatches = inventory.where((part) => 
         part.deviceModel.trim().toUpperCase() == localModel && 
         part.partType == partType &&
@@ -259,12 +270,11 @@ class InventoryProvider extends ChangeNotifier {
           ..supplierName = '⭐ المخزون المحلي (متوفر ${part.quantity}) ⭐'
           ..deviceBrand = part.deviceBrand
           ..deviceModel = part.deviceModel
-          ..partQuality = part.partName // استخدام اسم القطعة كوصف للجودة
+          ..partQuality = part.partName 
           ..price = part.costPrice
         );
       }
 
-      // 3. دمج القائمتين (المخزون المحلي يكون في القمة دائماً)
       currentSuggestedPrices = [...localSuggested, ...finalPrices];
       notifyListeners();
     } catch (e) {

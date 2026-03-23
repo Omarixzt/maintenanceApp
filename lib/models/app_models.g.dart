@@ -92,18 +92,23 @@ const MaintenanceTicketSchema = CollectionSchema(
       name: r'receivedDate',
       type: IsarType.string,
     ),
-    r'status': PropertySchema(
+    r'shopId': PropertySchema(
       id: 15,
+      name: r'shopId',
+      type: IsarType.string,
+    ),
+    r'status': PropertySchema(
+      id: 16,
       name: r'status',
       type: IsarType.string,
     ),
     r'syncStatus': PropertySchema(
-      id: 16,
+      id: 17,
       name: r'syncStatus',
       type: IsarType.long,
     ),
     r'updatedAt': PropertySchema(
-      id: 17,
+      id: 18,
       name: r'updatedAt',
       type: IsarType.long,
     )
@@ -122,6 +127,19 @@ const MaintenanceTicketSchema = CollectionSchema(
       properties: [
         IndexPropertySchema(
           name: r'firebaseId',
+          type: IndexType.hash,
+          caseSensitive: true,
+        )
+      ],
+    ),
+    r'shopId': IndexSchema(
+      id: 4502922094527709227,
+      name: r'shopId',
+      unique: false,
+      replace: false,
+      properties: [
+        IndexPropertySchema(
+          name: r'shopId',
           type: IndexType.hash,
           caseSensitive: true,
         )
@@ -173,6 +191,7 @@ int _maintenanceTicketEstimateSize(
   bytesCount += 3 + object.imei.length * 3;
   bytesCount += 3 + object.phoneNumber.length * 3;
   bytesCount += 3 + object.receivedDate.length * 3;
+  bytesCount += 3 + object.shopId.length * 3;
   bytesCount += 3 + object.status.length * 3;
   return bytesCount;
 }
@@ -198,9 +217,10 @@ void _maintenanceTicketSerialize(
   writer.writeDouble(offsets[12], object.netProfit);
   writer.writeString(offsets[13], object.phoneNumber);
   writer.writeString(offsets[14], object.receivedDate);
-  writer.writeString(offsets[15], object.status);
-  writer.writeLong(offsets[16], object.syncStatus);
-  writer.writeLong(offsets[17], object.updatedAt);
+  writer.writeString(offsets[15], object.shopId);
+  writer.writeString(offsets[16], object.status);
+  writer.writeLong(offsets[17], object.syncStatus);
+  writer.writeLong(offsets[18], object.updatedAt);
 }
 
 MaintenanceTicket _maintenanceTicketDeserialize(
@@ -226,9 +246,10 @@ MaintenanceTicket _maintenanceTicketDeserialize(
   object.netProfit = reader.readDouble(offsets[12]);
   object.phoneNumber = reader.readString(offsets[13]);
   object.receivedDate = reader.readString(offsets[14]);
-  object.status = reader.readString(offsets[15]);
-  object.syncStatus = reader.readLong(offsets[16]);
-  object.updatedAt = reader.readLong(offsets[17]);
+  object.shopId = reader.readString(offsets[15]);
+  object.status = reader.readString(offsets[16]);
+  object.syncStatus = reader.readLong(offsets[17]);
+  object.updatedAt = reader.readLong(offsets[18]);
   return object;
 }
 
@@ -272,8 +293,10 @@ P _maintenanceTicketDeserializeProp<P>(
     case 15:
       return (reader.readString(offset)) as P;
     case 16:
-      return (reader.readLong(offset)) as P;
+      return (reader.readString(offset)) as P;
     case 17:
+      return (reader.readLong(offset)) as P;
+    case 18:
       return (reader.readLong(offset)) as P;
     default:
       throw IsarError('Unknown property with id $propertyId');
@@ -491,6 +514,51 @@ extension MaintenanceTicketQueryWhere
               indexName: r'firebaseId',
               lower: [],
               upper: [firebaseId],
+              includeUpper: false,
+            ));
+      }
+    });
+  }
+
+  QueryBuilder<MaintenanceTicket, MaintenanceTicket, QAfterWhereClause>
+      shopIdEqualTo(String shopId) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.equalTo(
+        indexName: r'shopId',
+        value: [shopId],
+      ));
+    });
+  }
+
+  QueryBuilder<MaintenanceTicket, MaintenanceTicket, QAfterWhereClause>
+      shopIdNotEqualTo(String shopId) {
+    return QueryBuilder.apply(this, (query) {
+      if (query.whereSort == Sort.asc) {
+        return query
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'shopId',
+              lower: [],
+              upper: [shopId],
+              includeUpper: false,
+            ))
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'shopId',
+              lower: [shopId],
+              includeLower: false,
+              upper: [],
+            ));
+      } else {
+        return query
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'shopId',
+              lower: [shopId],
+              includeLower: false,
+              upper: [],
+            ))
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'shopId',
+              lower: [],
+              upper: [shopId],
               includeUpper: false,
             ));
       }
@@ -2333,6 +2401,142 @@ extension MaintenanceTicketQueryFilter
   }
 
   QueryBuilder<MaintenanceTicket, MaintenanceTicket, QAfterFilterCondition>
+      shopIdEqualTo(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'shopId',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<MaintenanceTicket, MaintenanceTicket, QAfterFilterCondition>
+      shopIdGreaterThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'shopId',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<MaintenanceTicket, MaintenanceTicket, QAfterFilterCondition>
+      shopIdLessThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'shopId',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<MaintenanceTicket, MaintenanceTicket, QAfterFilterCondition>
+      shopIdBetween(
+    String lower,
+    String upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'shopId',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<MaintenanceTicket, MaintenanceTicket, QAfterFilterCondition>
+      shopIdStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'shopId',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<MaintenanceTicket, MaintenanceTicket, QAfterFilterCondition>
+      shopIdEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'shopId',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<MaintenanceTicket, MaintenanceTicket, QAfterFilterCondition>
+      shopIdContains(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'shopId',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<MaintenanceTicket, MaintenanceTicket, QAfterFilterCondition>
+      shopIdMatches(String pattern, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'shopId',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<MaintenanceTicket, MaintenanceTicket, QAfterFilterCondition>
+      shopIdIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'shopId',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<MaintenanceTicket, MaintenanceTicket, QAfterFilterCondition>
+      shopIdIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'shopId',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<MaintenanceTicket, MaintenanceTicket, QAfterFilterCondition>
       statusEqualTo(
     String value, {
     bool caseSensitive = true,
@@ -2800,6 +3004,20 @@ extension MaintenanceTicketQuerySortBy
   }
 
   QueryBuilder<MaintenanceTicket, MaintenanceTicket, QAfterSortBy>
+      sortByShopId() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'shopId', Sort.asc);
+    });
+  }
+
+  QueryBuilder<MaintenanceTicket, MaintenanceTicket, QAfterSortBy>
+      sortByShopIdDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'shopId', Sort.desc);
+    });
+  }
+
+  QueryBuilder<MaintenanceTicket, MaintenanceTicket, QAfterSortBy>
       sortByStatus() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'status', Sort.asc);
@@ -3069,6 +3287,20 @@ extension MaintenanceTicketQuerySortThenBy
   }
 
   QueryBuilder<MaintenanceTicket, MaintenanceTicket, QAfterSortBy>
+      thenByShopId() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'shopId', Sort.asc);
+    });
+  }
+
+  QueryBuilder<MaintenanceTicket, MaintenanceTicket, QAfterSortBy>
+      thenByShopIdDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'shopId', Sort.desc);
+    });
+  }
+
+  QueryBuilder<MaintenanceTicket, MaintenanceTicket, QAfterSortBy>
       thenByStatus() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'status', Sort.asc);
@@ -3222,6 +3454,13 @@ extension MaintenanceTicketQueryWhereDistinct
   }
 
   QueryBuilder<MaintenanceTicket, MaintenanceTicket, QDistinct>
+      distinctByShopId({bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'shopId', caseSensitive: caseSensitive);
+    });
+  }
+
+  QueryBuilder<MaintenanceTicket, MaintenanceTicket, QDistinct>
       distinctByStatus({bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'status', caseSensitive: caseSensitive);
@@ -3354,6 +3593,12 @@ extension MaintenanceTicketQueryProperty
     });
   }
 
+  QueryBuilder<MaintenanceTicket, String, QQueryOperations> shopIdProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'shopId');
+    });
+  }
+
   QueryBuilder<MaintenanceTicket, String, QQueryOperations> statusProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'status');
@@ -3424,13 +3669,18 @@ const LocalPartSchema = CollectionSchema(
       name: r'quantity',
       type: IsarType.long,
     ),
-    r'syncStatus': PropertySchema(
+    r'shopId': PropertySchema(
       id: 8,
+      name: r'shopId',
+      type: IsarType.string,
+    ),
+    r'syncStatus': PropertySchema(
+      id: 9,
       name: r'syncStatus',
       type: IsarType.long,
     ),
     r'updatedAt': PropertySchema(
-      id: 9,
+      id: 10,
       name: r'updatedAt',
       type: IsarType.long,
     )
@@ -3449,6 +3699,19 @@ const LocalPartSchema = CollectionSchema(
       properties: [
         IndexPropertySchema(
           name: r'partId',
+          type: IndexType.hash,
+          caseSensitive: true,
+        )
+      ],
+    ),
+    r'shopId': IndexSchema(
+      id: 4502922094527709227,
+      name: r'shopId',
+      unique: false,
+      replace: false,
+      properties: [
+        IndexPropertySchema(
+          name: r'shopId',
           type: IndexType.hash,
           caseSensitive: true,
         )
@@ -3492,6 +3755,7 @@ int _localPartEstimateSize(
   }
   bytesCount += 3 + object.partName.length * 3;
   bytesCount += 3 + object.partType.length * 3;
+  bytesCount += 3 + object.shopId.length * 3;
   return bytesCount;
 }
 
@@ -3509,8 +3773,9 @@ void _localPartSerialize(
   writer.writeString(offsets[5], object.partName);
   writer.writeString(offsets[6], object.partType);
   writer.writeLong(offsets[7], object.quantity);
-  writer.writeLong(offsets[8], object.syncStatus);
-  writer.writeLong(offsets[9], object.updatedAt);
+  writer.writeString(offsets[8], object.shopId);
+  writer.writeLong(offsets[9], object.syncStatus);
+  writer.writeLong(offsets[10], object.updatedAt);
 }
 
 LocalPart _localPartDeserialize(
@@ -3529,8 +3794,9 @@ LocalPart _localPartDeserialize(
   object.partName = reader.readString(offsets[5]);
   object.partType = reader.readString(offsets[6]);
   object.quantity = reader.readLong(offsets[7]);
-  object.syncStatus = reader.readLong(offsets[8]);
-  object.updatedAt = reader.readLong(offsets[9]);
+  object.shopId = reader.readString(offsets[8]);
+  object.syncStatus = reader.readLong(offsets[9]);
+  object.updatedAt = reader.readLong(offsets[10]);
   return object;
 }
 
@@ -3558,8 +3824,10 @@ P _localPartDeserializeProp<P>(
     case 7:
       return (reader.readLong(offset)) as P;
     case 8:
-      return (reader.readLong(offset)) as P;
+      return (reader.readString(offset)) as P;
     case 9:
+      return (reader.readLong(offset)) as P;
+    case 10:
       return (reader.readLong(offset)) as P;
     default:
       throw IsarError('Unknown property with id $propertyId');
@@ -3780,6 +4048,51 @@ extension LocalPartQueryWhere
               indexName: r'partId',
               lower: [],
               upper: [partId],
+              includeUpper: false,
+            ));
+      }
+    });
+  }
+
+  QueryBuilder<LocalPart, LocalPart, QAfterWhereClause> shopIdEqualTo(
+      String shopId) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.equalTo(
+        indexName: r'shopId',
+        value: [shopId],
+      ));
+    });
+  }
+
+  QueryBuilder<LocalPart, LocalPart, QAfterWhereClause> shopIdNotEqualTo(
+      String shopId) {
+    return QueryBuilder.apply(this, (query) {
+      if (query.whereSort == Sort.asc) {
+        return query
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'shopId',
+              lower: [],
+              upper: [shopId],
+              includeUpper: false,
+            ))
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'shopId',
+              lower: [shopId],
+              includeLower: false,
+              upper: [],
+            ));
+      } else {
+        return query
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'shopId',
+              lower: [shopId],
+              includeLower: false,
+              upper: [],
+            ))
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'shopId',
+              lower: [],
+              upper: [shopId],
               includeUpper: false,
             ));
       }
@@ -4734,6 +5047,136 @@ extension LocalPartQueryFilter
     });
   }
 
+  QueryBuilder<LocalPart, LocalPart, QAfterFilterCondition> shopIdEqualTo(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'shopId',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<LocalPart, LocalPart, QAfterFilterCondition> shopIdGreaterThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'shopId',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<LocalPart, LocalPart, QAfterFilterCondition> shopIdLessThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'shopId',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<LocalPart, LocalPart, QAfterFilterCondition> shopIdBetween(
+    String lower,
+    String upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'shopId',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<LocalPart, LocalPart, QAfterFilterCondition> shopIdStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'shopId',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<LocalPart, LocalPart, QAfterFilterCondition> shopIdEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'shopId',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<LocalPart, LocalPart, QAfterFilterCondition> shopIdContains(
+      String value,
+      {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'shopId',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<LocalPart, LocalPart, QAfterFilterCondition> shopIdMatches(
+      String pattern,
+      {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'shopId',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<LocalPart, LocalPart, QAfterFilterCondition> shopIdIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'shopId',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<LocalPart, LocalPart, QAfterFilterCondition> shopIdIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'shopId',
+        value: '',
+      ));
+    });
+  }
+
   QueryBuilder<LocalPart, LocalPart, QAfterFilterCondition> syncStatusEqualTo(
       int value) {
     return QueryBuilder.apply(this, (query) {
@@ -4946,6 +5389,18 @@ extension LocalPartQuerySortBy on QueryBuilder<LocalPart, LocalPart, QSortBy> {
     });
   }
 
+  QueryBuilder<LocalPart, LocalPart, QAfterSortBy> sortByShopId() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'shopId', Sort.asc);
+    });
+  }
+
+  QueryBuilder<LocalPart, LocalPart, QAfterSortBy> sortByShopIdDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'shopId', Sort.desc);
+    });
+  }
+
   QueryBuilder<LocalPart, LocalPart, QAfterSortBy> sortBySyncStatus() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'syncStatus', Sort.asc);
@@ -5081,6 +5536,18 @@ extension LocalPartQuerySortThenBy
     });
   }
 
+  QueryBuilder<LocalPart, LocalPart, QAfterSortBy> thenByShopId() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'shopId', Sort.asc);
+    });
+  }
+
+  QueryBuilder<LocalPart, LocalPart, QAfterSortBy> thenByShopIdDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'shopId', Sort.desc);
+    });
+  }
+
   QueryBuilder<LocalPart, LocalPart, QAfterSortBy> thenBySyncStatus() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'syncStatus', Sort.asc);
@@ -5161,6 +5628,13 @@ extension LocalPartQueryWhereDistinct
     });
   }
 
+  QueryBuilder<LocalPart, LocalPart, QDistinct> distinctByShopId(
+      {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'shopId', caseSensitive: caseSensitive);
+    });
+  }
+
   QueryBuilder<LocalPart, LocalPart, QDistinct> distinctBySyncStatus() {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'syncStatus');
@@ -5227,6 +5701,12 @@ extension LocalPartQueryProperty
   QueryBuilder<LocalPart, int, QQueryOperations> quantityProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'quantity');
+    });
+  }
+
+  QueryBuilder<LocalPart, String, QQueryOperations> shopIdProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'shopId');
     });
   }
 

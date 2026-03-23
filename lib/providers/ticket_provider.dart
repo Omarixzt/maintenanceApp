@@ -18,10 +18,12 @@ class TicketProvider extends ChangeNotifier {
     syncAllPendingTickets();
   }
 
-  // تحميل التذاكر النشطة فقط (غير المؤرشفة) في الذاكرة
+  // تحميل التذاكر النشطة والخاصة بهذا المحل فقط
   Future<void> _loadTickets() async {
+    String? shopId = await IsarService.getSetting('active_shop_id');
     tickets = await IsarService.db.maintenanceTickets
         .filter()
+        .shopIdEqualTo(shopId ?? '')
         .isArchivedEqualTo(false)
         .sortByReceivedDateDesc()
         .findAll();
@@ -38,7 +40,13 @@ class TicketProvider extends ChangeNotifier {
 
   Future<void> syncAllPendingTickets() async {
     try {
-      final pendingTickets = await IsarService.db.maintenanceTickets.filter().syncStatusEqualTo(0).findAll();
+      String? shopId = await IsarService.getSetting('active_shop_id');
+      final pendingTickets = await IsarService.db.maintenanceTickets
+          .filter()
+          .shopIdEqualTo(shopId ?? '')
+          .syncStatusEqualTo(0)
+          .findAll();
+          
       for (var ticket in pendingTickets) {
         await _syncTicketToFirebase(ticket);
       }
@@ -47,11 +55,15 @@ class TicketProvider extends ChangeNotifier {
     }
   }
 
-  // الاستماع للتذاكر النشطة فقط من السحابة
-  void _startRealtimeSync() {
+  // الاستماع للتذاكر الخاصة بالمحل من السحابة (تحديث فوري للورشة)
+  void _startRealtimeSync() async {
+    String? shopId = await IsarService.getSetting('active_shop_id');
+    if (shopId == null || shopId.isEmpty) return;
+
     _ticketsSubscription?.cancel();
     _ticketsSubscription = FirebaseFirestore.instance
         .collection('maintenance_tickets')
+        .where('shopId', isEqualTo: shopId) // <--- فلترة خاصة بالمحل
         .where('isArchived', isEqualTo: false)
         .snapshots()
         .listen((snapshot) async {
@@ -86,6 +98,9 @@ class TicketProvider extends ChangeNotifier {
   }
 
   Future<void> addTicket(MaintenanceTicket ticket) async {
+    String? shopId = await IsarService.getSetting('active_shop_id');
+    ticket.shopId = shopId ?? ''; // ختم التذكرة باسم المحل
+    
     await IsarService.db.writeTxn(() async => await IsarService.db.maintenanceTickets.put(ticket));
     tickets.insert(0, ticket);
     notifyListeners();
@@ -100,6 +115,7 @@ class TicketProvider extends ChangeNotifier {
     if (newStatus == 'Delivered' && ticket.syncStatus == 0) {
       try {
         await FirebaseFirestore.instance.collection('pos_sync').doc(ticket.firebaseId).set({
+          'shopId': ticket.shopId, // لضمان العزل المالي في المستقبل
           'customerName': ticket.customerName,
           'deviceModel': ticket.deviceModel,
           'finalCost': ticket.finalCost,
@@ -133,29 +149,32 @@ class TicketProvider extends ChangeNotifier {
     return true;
   }
 
-  // دالة جلب الأجهزة المؤرشفة الجديدة فقط من السحابة (Delta Sync)
+  // الدالة المعدلة لسحب الأرشيف الخاص بالمحل فقط
   Future<String> syncNewArchivedTickets() async {
     try {
+      String? shopId = await IsarService.getSetting('active_shop_id');
+      if (shopId == null || shopId.isEmpty) return "يرجى تسجيل الدخول أولاً.";
+
       final isar = IsarService.db;
 
-      // البحث عن أحدث جهاز مؤرشف محلياً لمعرفة وقت آخر تحديث
       final lastLocalArchivedTicket = await isar.maintenanceTickets
           .filter()
+          .shopIdEqualTo(shopId)
           .isArchivedEqualTo(true)
           .sortByUpdatedAtDesc()
           .findFirst();
 
       int lastSyncTime = lastLocalArchivedTicket?.updatedAt ?? 0;
 
-      // جلب الأجهزة المؤرشفة من فايربيس التي تم تحديثها بعد هذا الوقت فقط
       final snapshot = await FirebaseFirestore.instance
           .collection('maintenance_tickets')
+          .where('shopId', isEqualTo: shopId) // <--- فلترة الأرشيف الخاص بالمحل فقط
           .where('isArchived', isEqualTo: true)
           .where('updatedAt', isGreaterThan: lastSyncTime)
           .get();
 
       if (snapshot.docs.isEmpty) {
-        return "الأرشيف المحلي محدث بالفعل، لا توجد أجهزة جديدة.";
+        return "الأرشيف محدث بالكامل.";
       }
 
       int addedCount = 0;
@@ -175,7 +194,7 @@ class TicketProvider extends ChangeNotifier {
         }
       });
 
-      return "تم سحب $addedCount جهاز جديد إلى الأرشيف بنجاح.";
+      return "تم سحب $addedCount جهاز جديد إلى الأرشيف.";
     } catch (e) {
       debugPrint("خطأ في مزامنة الأرشيف: $e");
       return "حدث خطأ أثناء الاتصال بالسحابة.";

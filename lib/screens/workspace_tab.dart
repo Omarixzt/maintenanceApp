@@ -62,7 +62,6 @@ class _WorkspaceTabState extends State<WorkspaceTab> {
     );
   }
 
-  // نافذة طلب الحسابات النهائية قبل الأرشفة
   Future<void> _promptForArchiveDetails(BuildContext context, TicketProvider provider, MaintenanceTicket ticket, String newStatus) async {
     final finalCostCtrl = TextEditingController(text: ticket.expectedCost.toString());
     final partsCostCtrl = TextEditingController(text: '0');
@@ -122,7 +121,7 @@ class _WorkspaceTabState extends State<WorkspaceTab> {
       double partsC = double.tryParse(partsCostCtrl.text) ?? 0.0;
       
       ticket.finalCost = finalC;
-      ticket.netProfit = finalC - partsC; // حساب صافي الربح
+      ticket.netProfit = finalC - partsC;
       
       provider.updateTicketStatus(ticket, newStatus, archive: true);
       if (context.mounted) {
@@ -310,7 +309,6 @@ class _WorkspaceTabState extends State<WorkspaceTab> {
       provider.updateTicketStatus(ticket, newStatus, archive: false);
     } 
     else if (newStatus == 'Delivered') {
-      // إظهار نافذة إدخال الحسابات وتأكيد التسليم
       await _promptForArchiveDetails(context, provider, ticket, newStatus);
     } 
     else {
@@ -318,9 +316,44 @@ class _WorkspaceTabState extends State<WorkspaceTab> {
     }
   }
 
+  Widget _buildStatusBadge(BuildContext context, MaintenanceTicket ticket, Map<String, dynamic> statusInfo, TicketProvider provider) {
+    return PopupMenuButton<String>(
+      onSelected: (val) => _handleStatusChange(context, provider, ticket, val),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+      itemBuilder: (ctx) => _statusConfig.keys.map((k) => PopupMenuItem(
+        value: k, 
+        child: Row(
+          children: [
+            Icon(Icons.circle, color: _statusConfig[k]!['color'], size: 12),
+            const SizedBox(width: 10),
+            Text(_statusConfig[k]!['label'], style: const TextStyle(fontWeight: FontWeight.w600)),
+          ],
+        )
+      )).toList(),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: (statusInfo['color'] as Color).withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: (statusInfo['color'] as Color).withValues(alpha: 0.2)),
+        ),
+        child: Row(
+          children: [
+            Text(
+              statusInfo['label'],
+              style: TextStyle(color: statusInfo['color'], fontWeight: FontWeight.bold, fontSize: 12),
+            ),
+            Icon(Icons.arrow_drop_down, color: statusInfo['color'], size: 18),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final provider = Provider.of<TicketProvider>(context);
+    final settingsProvider = Provider.of<SettingsProvider>(context, listen: false);
     
     final filteredTickets = provider.tickets.where((t) {
       final query = _searchQuery.toLowerCase();
@@ -465,14 +498,23 @@ class _WorkspaceTabState extends State<WorkspaceTab> {
                                   ],
 
                                   const SizedBox(height: 16),
-                                  // أزرار الطباعة
+                                  const Divider(height: 1),
+                                  const SizedBox(height: 12),
+                                  
+                                  // --- أزرار الطباعة والمشاركة المستقلة لوصل الزبون ---
                                   Row(
                                     children: [
                                       Expanded(
+                                        flex: 4,
                                         child: OutlinedButton.icon(
-                                          onPressed: () => _printCustomerReceipt(context, ticket),
-                                          icon: const Icon(Icons.receipt, size: 16),
-                                          label: const Text('وصل الزبون', style: TextStyle(fontSize: 12)),
+                                          onPressed: () => PrinterService.printWithFallbackDialog(
+                                            context: context,
+                                            ticket: ticket,
+                                            macAddress: settingsProvider.printerMac,
+                                            isCustomerCopy: true,
+                                          ),
+                                          icon: const Icon(Icons.print, size: 16),
+                                          label: const Text('طباعة وصل الزبون', style: TextStyle(fontSize: 12)),
                                           style: OutlinedButton.styleFrom(
                                             padding: const EdgeInsets.symmetric(vertical: 8),
                                             side: const BorderSide(color: AppTheme.albaikDeepNavy),
@@ -481,18 +523,64 @@ class _WorkspaceTabState extends State<WorkspaceTab> {
                                       ),
                                       const SizedBox(width: 8),
                                       Expanded(
-                                        child: OutlinedButton.icon(
-                                          onPressed: () => _printDeviceSticker(context, ticket),
-                                          icon: const Icon(Icons.label, size: 16),
-                                          label: const Text('وصل المحل', style: TextStyle(fontSize: 12)),
+                                        flex: 1,
+                                        child: OutlinedButton(
                                           style: OutlinedButton.styleFrom(
-                                            padding: const EdgeInsets.symmetric(vertical: 8),
-                                            side: const BorderSide(color: AppTheme.albaikRichRed),
+                                            padding: EdgeInsets.zero,
+                                            side: BorderSide(color: AppTheme.albaikDeepNavy.withValues(alpha: 0.5)),
                                           ),
+                                          onPressed: () => PrinterService.generateAndShareReceiptDirectly(
+                                            context: context,
+                                            ticket: ticket,
+                                            isCustomerCopy: true,
+                                          ),
+                                          child: const Icon(Icons.share, color: AppTheme.albaikDeepNavy, size: 20),
                                         ),
                                       ),
                                     ],
                                   ),
+                                  const SizedBox(height: 8),
+                                  
+                                  // --- أزرار الطباعة والمشاركة المستقلة لملصق الجهاز ---
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        flex: 4,
+                                        child: OutlinedButton.icon(
+                                          onPressed: () => PrinterService.printWithFallbackDialog(
+                                            context: context,
+                                            ticket: ticket,
+                                            macAddress: settingsProvider.printerMac,
+                                            isCustomerCopy: false,
+                                          ),
+                                          icon: const Icon(Icons.label_outline, size: 16),
+                                          label: const Text('طباعة ملصق الجهاز', style: TextStyle(fontSize: 12)),
+                                          style: OutlinedButton.styleFrom(
+                                            padding: const EdgeInsets.symmetric(vertical: 8),
+                                            foregroundColor: AppTheme.albaikRichRed,
+                                            side: const BorderSide(color: AppTheme.albaikRichRed),
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        flex: 1,
+                                        child: OutlinedButton(
+                                          style: OutlinedButton.styleFrom(
+                                            padding: EdgeInsets.zero,
+                                            side: BorderSide(color: AppTheme.albaikRichRed.withValues(alpha: 0.5)),
+                                          ),
+                                          onPressed: () => PrinterService.generateAndShareReceiptDirectly(
+                                            context: context,
+                                            ticket: ticket,
+                                            isCustomerCopy: false,
+                                          ),
+                                          child: const Icon(Icons.share, color: AppTheme.albaikRichRed, size: 20),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+
                                 ],
                               ),
                             ),
@@ -505,95 +593,5 @@ class _WorkspaceTabState extends State<WorkspaceTab> {
         ),
       ),
     );
-  }
-
-  Widget _buildStatusBadge(BuildContext context, MaintenanceTicket ticket, Map<String, dynamic> statusInfo, TicketProvider provider) {
-    return PopupMenuButton<String>(
-      onSelected: (val) => _handleStatusChange(context, provider, ticket, val),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-      itemBuilder: (ctx) => _statusConfig.keys.map((k) => PopupMenuItem(
-        value: k, 
-        child: Row(
-          children: [
-            Icon(Icons.circle, color: _statusConfig[k]!['color'], size: 12),
-            const SizedBox(width: 10),
-            Text(_statusConfig[k]!['label'], style: const TextStyle(fontWeight: FontWeight.w600)),
-          ],
-        )
-      )).toList(),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        decoration: BoxDecoration(
-          color: (statusInfo['color'] as Color).withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: (statusInfo['color'] as Color).withValues(alpha: 0.2)),
-        ),
-        child: Row(
-          children: [
-            Text(
-              statusInfo['label'],
-              style: TextStyle(color: statusInfo['color'], fontWeight: FontWeight.bold, fontSize: 12),
-            ),
-            Icon(Icons.arrow_drop_down, color: statusInfo['color'], size: 18),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Future<void> _printCustomerReceipt(BuildContext context, MaintenanceTicket ticket) async {
-    final settingsProvider = Provider.of<SettingsProvider>(context, listen: false);
-
-    final result = await PrinterService.retryPrint(
-      ticket: ticket,
-      macAddress: settingsProvider.printerMac,
-      isCustomerCopy: true,
-    );
-
-    if (!context.mounted) return;
-
-    if (!result['success']) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('فشل في طباعة وصل الزبون: ${result['message']}'),
-          backgroundColor: AppTheme.albaikRichRed,
-        ),
-      );
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('تمت طباعة وصل الزبون بنجاح - الرقم التسلسلي: ${result['serialNumber']}'),
-          backgroundColor: Colors.green,
-        ),
-      );
-    }
-  }
-
-  Future<void> _printDeviceSticker(BuildContext context, MaintenanceTicket ticket) async {
-    final settingsProvider = Provider.of<SettingsProvider>(context, listen: false);
-
-    final result = await PrinterService.retryPrint(
-      ticket: ticket,
-      macAddress: settingsProvider.printerMac,
-      isCustomerCopy: false,
-    );
-
-    if (!context.mounted) return;
-
-    if (!result['success']) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('فشل في طباعة وصل المحل: ${result['message']}'),
-          backgroundColor: AppTheme.albaikRichRed,
-        ),
-      );
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('تمت طباعة وصل المحل بنجاح'),
-          backgroundColor: Colors.green,
-        ),
-      );
-    }
   }
 }
