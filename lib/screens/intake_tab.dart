@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
+import 'package:flutter_animate/flutter_animate.dart'; 
 import '../providers/ticket_provider.dart';
 import '../providers/inventory_provider.dart';
 import '../providers/settings_provider.dart';
@@ -35,6 +36,7 @@ class _IntakeTabState extends State<IntakeTab> {
 
   DeviceBrand? _selectedBrand;
   DateTime? _selectedDeliveryDate;
+  String? _phoneWarning; // متغير جديد لتخزين رسالة التحذير الخاصة بالهاتف
 
   final List<Map<String, dynamic>> _faultTypes = [
     {'name': 'شاشة', 'icon': Icons.phone_iphone, 'color': AppTheme.albaikRichRed},
@@ -53,21 +55,47 @@ class _IntakeTabState extends State<IntakeTab> {
 
   File? _deviceImageFile;
   final ImagePicker _picker = ImagePicker();
-  MaintenanceTicket? _lastSavedTicket;
 
   @override
   void initState() {
     super.initState();
     _costCtrl.addListener(_onCostChanged);
+    _phoneCtrl.addListener(_checkPhoneWarning); // إضافة المستمع اللحظي لرقم الهاتف
   }
 
   void _onCostChanged() {
     setState(() {}); 
   }
 
+  // الدالة الجديدة للتحقق اللحظي من رقم الهاتف
+  void _checkPhoneWarning() {
+    final val = _phoneCtrl.text.trim();
+    if (val.isEmpty) {
+      if (_phoneWarning != null) setState(() => _phoneWarning = null);
+      return;
+    }
+    
+    bool hasLengthError = val.length != 10;
+    bool hasPrefixError = !(val.startsWith('079') || val.startsWith('078') || val.startsWith('077'));
+    
+    String? newWarning;
+    if (hasLengthError && hasPrefixError) {
+      newWarning = 'تنبيه: الرقم ليس 10 أرقام ولا يبدأ بـ 079, 078, 077';
+    } else if (hasLengthError) {
+      newWarning = 'تنبيه: رقم الهاتف يجب أن يتكون من 10 أرقام';
+    } else if (hasPrefixError) {
+      newWarning = 'تنبيه: أرقام الهواتف الأردنية تبدأ بـ 079, 078, 077';
+    }
+    
+    if (_phoneWarning != newWarning) {
+      setState(() => _phoneWarning = newWarning);
+    }
+  }
+
   @override
   void dispose() {
     _costCtrl.removeListener(_onCostChanged);
+    _phoneCtrl.removeListener(_checkPhoneWarning); // إزالة المستمع لتنظيف الذاكرة
     _nameCtrl.dispose();
     _phoneCtrl.dispose();
     _customFaultCtrl.dispose();
@@ -194,6 +222,170 @@ class _IntakeTabState extends State<IntakeTab> {
     }
   }
 
+  Future<void> _handlePostSave(MaintenanceTicket ticket) async {
+    final settingsProvider = Provider.of<SettingsProvider>(context, listen: false);
+
+    // 1. السؤال الأول: طباعة وصل الزبون
+    bool? printCustomer = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+        title: const Row(
+          children: [
+            Icon(Icons.receipt_long, color: AppTheme.albaikRichRed),
+            SizedBox(width: 8),
+            Text('وصل الزبون', style: TextStyle(color: AppTheme.albaikDeepNavy, fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: const Text('هل تريد طباعة وصل استلام للزبون؟', style: TextStyle(fontSize: 16)),
+        actions: [
+          ScalePress(
+            child: TextButton(
+              onPressed: () => Navigator.pop(ctx, false), 
+              child: const Text('تخطي', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold))
+            ),
+          ),
+          ScalePress(
+            child: ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: AppTheme.albaikRichRed),
+              onPressed: () => Navigator.pop(ctx, true), 
+              child: const Text('طباعة')
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (printCustomer == true && mounted) {
+      await PrinterService.printWithFallbackDialog(
+        context: context,
+        ticket: ticket,
+        macAddress: settingsProvider.printerMac,
+        isCustomerCopy: true,
+      );
+      await Future.delayed(const Duration(seconds: 2));
+    }
+
+    // 2. السؤال الثاني: طباعة وصل المحل
+    if (!mounted) return;
+    bool? printShop = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+        title: const Row(
+          children: [
+            Icon(Icons.storefront, color: AppTheme.albaikDeepNavy),
+            SizedBox(width: 8),
+            Text('وصل المحل', style: TextStyle(color: AppTheme.albaikDeepNavy, fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: const Text('هل تريد طباعة ملصق/وصل للمحل للصقه على الجهاز؟', style: TextStyle(fontSize: 16)),
+        actions: [
+          ScalePress(
+            child: TextButton(
+              onPressed: () => Navigator.pop(ctx, false), 
+              child: const Text('تخطي', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold))
+            ),
+          ),
+          ScalePress(
+            child: ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: AppTheme.albaikDeepNavy),
+              onPressed: () => Navigator.pop(ctx, true), 
+              child: const Text('طباعة')
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (printShop == true && mounted) {
+      await PrinterService.printWithFallbackDialog(
+        context: context,
+        ticket: ticket,
+        macAddress: settingsProvider.printerMac,
+        isCustomerCopy: false,
+      );
+      await Future.delayed(const Duration(seconds: 1));
+    }
+
+    // 3. أنيميشن النجاح وتصفير الشاشة
+    if (mounted) {
+      _showSuccessAnimationAndReset();
+    }
+  }
+
+  void _showSuccessAnimationAndReset() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        content: Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.green.withValues(alpha: 0.1),
+                blurRadius: 10,
+                offset: const Offset(0, 5),
+              )
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.check_circle_outline, color: Colors.green, size: 70)
+                  .animate()
+                  .scale(duration: const Duration(milliseconds: 500), curve: Curves.elasticOut)
+                  .shimmer(delay: const Duration(milliseconds: 300)), 
+
+              const SizedBox(height: 16),
+              
+              const Text(
+                'تم حفظ الوصل بنجاح!',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 18,
+                  color: AppTheme.albaikDeepNavy,
+                ),
+              ).animate()
+                  .fadeIn(delay: const Duration(milliseconds: 200))
+                  .slideY(begin: 0.2, end: 0, curve: Curves.easeInOutBack),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    Future.delayed(const Duration(milliseconds: 2500), () {
+      if (mounted) {
+        Navigator.of(context).pop(); 
+
+        _formKey.currentState?.reset();
+        setState(() {
+          _nameCtrl.clear();
+          _phoneCtrl.clear();
+          _customFaultCtrl.clear();
+          _costCtrl.clear();
+          _modelCtrl.clear();
+          _selectedBrand = null;
+          _selectedDeliveryDate = null;
+          _deviceImageFile = null;
+          _selectedFaultType = 'شاشة';
+          _phoneWarning = null; // تصفير حقل التنبيه
+        });
+        
+        Provider.of<InventoryProvider>(context, listen: false).clearSuggestedPrices();
+      }
+    });
+  }
+
   void _saveTicket() async {
     _unfocusAll();
     
@@ -220,7 +412,6 @@ class _IntakeTabState extends State<IntakeTab> {
       }
 
       final newTicket = MaintenanceTicket()
-        ..firebaseId = '${DateTime.now().millisecondsSinceEpoch}-${_phoneCtrl.text.hashCode}'
         ..customerName = _nameCtrl.text.trim()
         ..phoneNumber = _phoneCtrl.text.trim()
         ..deviceType = _selectedBrand!.name
@@ -236,103 +427,10 @@ class _IntakeTabState extends State<IntakeTab> {
 
       Provider.of<TicketProvider>(context, listen: false).addTicket(newTicket);
 
-      _lastSavedTicket = newTicket;
+      await _handlePostSave(newTicket);
 
-      await _printTicket(newTicket);
-
-      _formKey.currentState!.reset();
-      _costCtrl.clear();
-      _customFaultCtrl.clear();
-      _modelCtrl.clear();
-      _nameCtrl.clear();
-      _phoneCtrl.clear();
-
-      Provider.of<InventoryProvider>(context, listen: false).clearSuggestedPrices();
-
-      setState(() {
-        _selectedBrand = null;
-        _deviceImageFile = null;
-        _selectedFaultType = 'شاشة';
-        _selectedDeliveryDate = null;
-      });
-
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم تسجيل الجهاز بنجاح')));
     } else {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('يرجى إكمال البيانات المطلوبة')));
-    }
-  }
-
-  Future<void> _printTicket(MaintenanceTicket ticket) async {
-    final settingsProvider = Provider.of<SettingsProvider>(context, listen: false);
-
-    // حوار التخيير الذي تم استعادته
-    final printOptions = await showDialog<Map<String, bool>>(
-      context: context,
-      builder: (BuildContext context) {
-        bool printCustomer = true;
-        bool printDevice = true;
-
-        return StatefulBuilder(
-          builder: (context, setState) => AlertDialog(
-            title: const Text('اختيار الوصولات المراد طباعتها'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                CheckboxListTile(
-                  title: const Text('وصل الزبون'),
-                  value: printCustomer,
-                  onChanged: (value) => setState(() => printCustomer = value ?? true),
-                  activeColor: AppTheme.albaikRichRed,
-                ),
-                CheckboxListTile(
-                  title: const Text('وصل المحل (للصق على الجهاز)'),
-                  value: printDevice,
-                  onChanged: (value) => setState(() => printDevice = value ?? true),
-                  activeColor: AppTheme.albaikRichRed,
-                ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(null),
-                child: const Text('تخطي الطباعة', style: TextStyle(color: Colors.grey)),
-              ),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(backgroundColor: AppTheme.albaikDeepNavy),
-                onPressed: () => Navigator.of(context).pop({
-                  'customer': printCustomer,
-                  'device': printDevice,
-                }),
-                child: const Text('طباعة'),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-
-    if (printOptions == null) return; 
-
-    if (printOptions['customer'] == true) {
-      await PrinterService.printWithFallbackDialog(
-        context: context,
-        ticket: ticket,
-        macAddress: settingsProvider.printerMac,
-        isCustomerCopy: true,
-      );
-      
-      if (printOptions['device'] == true) {
-        await Future.delayed(const Duration(seconds: 3));
-      }
-    }
-
-    if (printOptions['device'] == true) {
-      await PrinterService.printWithFallbackDialog(
-        context: context,
-        ticket: ticket,
-        macAddress: settingsProvider.printerMac,
-        isCustomerCopy: false,
-      );
     }
   }
 
@@ -397,7 +495,6 @@ class _IntakeTabState extends State<IntakeTab> {
   @override
   Widget build(BuildContext context) {
     final inventoryProvider = Provider.of<InventoryProvider>(context);
-    final settingsProvider = Provider.of<SettingsProvider>(context, listen: false);
     final currentFaultData = _faultTypes.firstWhere((f) => f['name'] == _selectedFaultType, orElse: () => _faultTypes.last);
 
     bool isTodaySelected = _selectedDeliveryDate != null && DateFormat('yyyy-MM-dd').format(_selectedDeliveryDate!) == DateFormat('yyyy-MM-dd').format(DateTime.now());
@@ -422,38 +519,59 @@ class _IntakeTabState extends State<IntakeTab> {
                   validator: (val) => val!.isEmpty ? 'مطلوب' : null,
                 ),
                 const SizedBox(height: 16),
+                
                 TextFormField(
                   controller: _phoneCtrl,
                   keyboardType: TextInputType.phone,
                   decoration: const InputDecoration(labelText: 'رقم الهاتف', prefixIcon: Icon(Icons.phone_outlined)),
                   validator: (val) => val!.isEmpty ? 'مطلوب' : null,
                 ),
-                const SizedBox(height: 24),
-
-                InkWell(
-                  onTap: () {
-                    _unfocusAll();
-                    _showBrandPicker(context);
-                  },
-                  borderRadius: BorderRadius.circular(12),
-                  child: InputDecorator(
-                    decoration: const InputDecoration(labelText: 'نوع الجهاز (الشركة)', prefixIcon: Icon(Icons.business_outlined)),
+                // رسالة التنبيه اللحظية أسفل حقل رقم الهاتف
+                if (_phoneWarning != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8, right: 12),
                     child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
+                        Icon(Icons.warning_amber_rounded, color: Colors.orange.shade700, size: 16),
+                        const SizedBox(width: 6),
                         Expanded(
                           child: Text(
-                            _selectedBrand?.name ?? 'اضغط لاختيار الشركة',
-                            style: TextStyle(
-                              color: _selectedBrand == null ? Colors.grey[500] : AppTheme.albaikDeepNavy,
-                              fontSize: 16,
-                              fontWeight: _selectedBrand == null ? FontWeight.normal : FontWeight.w600,
-                            ),
-                            overflow: TextOverflow.ellipsis,
+                            _phoneWarning!, 
+                            style: TextStyle(color: Colors.orange.shade700, fontSize: 12, fontWeight: FontWeight.bold)
                           ),
                         ),
-                        Icon(Icons.keyboard_arrow_down_rounded, color: AppTheme.albaikDeepNavy.withOpacity(0.4)),
                       ],
+                    ),
+                  ),
+                
+                const SizedBox(height: 24),
+
+                ScalePress(
+                  child: InkWell(
+                    onTap: () {
+                      _unfocusAll();
+                      _showBrandPicker(context);
+                    },
+                    borderRadius: BorderRadius.circular(12),
+                    child: InputDecorator(
+                      decoration: const InputDecoration(labelText: 'نوع الجهاز (الشركة)', prefixIcon: Icon(Icons.business_outlined)),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              _selectedBrand?.name ?? 'اضغط لاختيار الشركة',
+                              style: TextStyle(
+                                color: _selectedBrand == null ? Colors.grey[500] : AppTheme.albaikDeepNavy,
+                                fontSize: 16,
+                                fontWeight: _selectedBrand == null ? FontWeight.normal : FontWeight.w600,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          Icon(Icons.keyboard_arrow_down_rounded, color: AppTheme.albaikDeepNavy.withOpacity(0.4)),
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -513,58 +631,62 @@ class _IntakeTabState extends State<IntakeTab> {
                           );
                         },
                       )
-                    : InkWell(
-                        onTap: () {
-                          _unfocusAll();
-                          _showModelPicker(context);
-                        },
-                        borderRadius: BorderRadius.circular(12),
-                        child: InputDecorator(
-                          decoration: const InputDecoration(labelText: 'موديل الجهاز', prefixIcon: Icon(Icons.smartphone_outlined)),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  _modelCtrl.text.isEmpty ? 'اضغط لاختيار الموديل' : _modelCtrl.text,
-                                  style: TextStyle(
-                                    color: _modelCtrl.text.isEmpty ? Colors.grey[500] : AppTheme.albaikDeepNavy,
-                                    fontSize: 16,
-                                    fontWeight: _modelCtrl.text.isEmpty ? FontWeight.normal : FontWeight.w600,
+                    : ScalePress(
+                        child: InkWell(
+                          onTap: () {
+                            _unfocusAll();
+                            _showModelPicker(context);
+                          },
+                          borderRadius: BorderRadius.circular(12),
+                          child: InputDecorator(
+                            decoration: const InputDecoration(labelText: 'موديل الجهاز', prefixIcon: Icon(Icons.smartphone_outlined)),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    _modelCtrl.text.isEmpty ? 'اضغط لاختيار الموديل' : _modelCtrl.text,
+                                    style: TextStyle(
+                                      color: _modelCtrl.text.isEmpty ? Colors.grey[500] : AppTheme.albaikDeepNavy,
+                                      fontSize: 16,
+                                      fontWeight: _modelCtrl.text.isEmpty ? FontWeight.normal : FontWeight.w600,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
                                   ),
-                                  overflow: TextOverflow.ellipsis,
                                 ),
-                              ),
-                              Icon(Icons.keyboard_arrow_down_rounded, color: AppTheme.albaikDeepNavy.withOpacity(0.4)),
-                            ],
+                                Icon(Icons.keyboard_arrow_down_rounded, color: AppTheme.albaikDeepNavy.withOpacity(0.4)),
+                              ],
+                            ),
                           ),
                         ),
                       ),
                 const SizedBox(height: 24),
 
-                InkWell(
-                  onTap: () {
-                    _unfocusAll();
-                    _showFaultPicker(context);
-                  },
-                  borderRadius: BorderRadius.circular(12),
-                  child: InputDecorator(
-                    decoration: InputDecoration(
-                      labelText: 'نوع العطل',
-                      prefixIcon: Icon(currentFaultData['icon'], color: AppTheme.albaikRichRed),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Expanded(
-                          child: Text(
-                            _selectedFaultType,
-                            style: const TextStyle(fontSize: 16, color: AppTheme.albaikDeepNavy, fontWeight: FontWeight.w600),
-                            overflow: TextOverflow.ellipsis,
+                ScalePress(
+                  child: InkWell(
+                    onTap: () {
+                      _unfocusAll();
+                      _showFaultPicker(context);
+                    },
+                    borderRadius: BorderRadius.circular(12),
+                    child: InputDecorator(
+                      decoration: InputDecoration(
+                        labelText: 'نوع العطل',
+                        prefixIcon: Icon(currentFaultData['icon'], color: AppTheme.albaikRichRed),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              _selectedFaultType,
+                              style: const TextStyle(fontSize: 16, color: AppTheme.albaikDeepNavy, fontWeight: FontWeight.w600),
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ),
-                        ),
-                        Icon(Icons.keyboard_arrow_down_rounded, color: AppTheme.albaikDeepNavy.withOpacity(0.4)),
-                      ],
+                          Icon(Icons.keyboard_arrow_down_rounded, color: AppTheme.albaikDeepNavy.withOpacity(0.4)),
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -680,40 +802,44 @@ class _IntakeTabState extends State<IntakeTab> {
                             Row(
                               children: [
                                 Expanded(
-                                  child: OutlinedButton(
-                                    style: OutlinedButton.styleFrom(
-                                      side: BorderSide(color: isLocalInventory ? Colors.green.shade700 : AppTheme.albaikDeepNavy),
-                                      foregroundColor: isLocalInventory ? Colors.green.shade700 : AppTheme.albaikDeepNavy,
-                                      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 2),
-                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                    ),
-                                    onPressed: () {
-                                      _unfocusAll();
-                                      _costCtrl.text = sp.price.toString();
-                                      _scrollToCostField(); 
-                                    },
-                                    child: FittedBox(
-                                      fit: BoxFit.scaleDown,
-                                      child: Text('التكلفة عليك\n${sp.price}', textAlign: TextAlign.center, style: const TextStyle(fontSize: 13, height: 1.3, fontWeight: FontWeight.bold)),
+                                  child: ScalePress(
+                                    child: OutlinedButton(
+                                      style: OutlinedButton.styleFrom(
+                                        side: BorderSide(color: isLocalInventory ? Colors.green.shade700 : AppTheme.albaikDeepNavy),
+                                        foregroundColor: isLocalInventory ? Colors.green.shade700 : AppTheme.albaikDeepNavy,
+                                        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 2),
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                      ),
+                                      onPressed: () {
+                                        _unfocusAll();
+                                        _costCtrl.text = sp.price.toString();
+                                        _scrollToCostField(); 
+                                      },
+                                      child: FittedBox(
+                                        fit: BoxFit.scaleDown,
+                                        child: Text('التكلفة عليك\n${sp.price}', textAlign: TextAlign.center, style: const TextStyle(fontSize: 13, height: 1.3, fontWeight: FontWeight.bold)),
+                                      ),
                                     ),
                                   ),
                                 ),
                                 const SizedBox(width: 12),
                                 Expanded(
-                                  child: ElevatedButton(
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: isLocalInventory ? Colors.green.shade700 : AppTheme.albaikRichRed,
-                                      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 2),
-                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                    ),
-                                    onPressed: () {
-                                      _unfocusAll();
-                                      _costCtrl.text = normalPrice.toString();
-                                      _scrollToCostField(); 
-                                    },
-                                    child: FittedBox(
-                                      fit: BoxFit.scaleDown,
-                                      child: Text('السعر المقترح\n$normalPrice', textAlign: TextAlign.center, style: const TextStyle(fontSize: 13, height: 1.3, fontWeight: FontWeight.bold)),
+                                  child: ScalePress(
+                                    child: ElevatedButton(
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: isLocalInventory ? Colors.green.shade700 : AppTheme.albaikRichRed,
+                                        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 2),
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                      ),
+                                      onPressed: () {
+                                        _unfocusAll();
+                                        _costCtrl.text = normalPrice.toString();
+                                        _scrollToCostField(); 
+                                      },
+                                      child: FittedBox(
+                                        fit: BoxFit.scaleDown,
+                                        child: Text('السعر المقترح\n$normalPrice', textAlign: TextAlign.center, style: const TextStyle(fontSize: 13, height: 1.3, fontWeight: FontWeight.bold)),
+                                      ),
                                     ),
                                   ),
                                 ),
@@ -743,33 +869,35 @@ class _IntakeTabState extends State<IntakeTab> {
                     final bool isSelected = double.tryParse(_costCtrl.text) == qp.price;
                     final String displayPrice = qp.price % 1 == 0 ? qp.price.toInt().toString() : qp.price.toStringAsFixed(1);
 
-                    return InkWell(
-                      borderRadius: BorderRadius.circular(20),
-                      onTap: () {
-                        _unfocusAll();
-                        _costCtrl.text = displayPrice;
-                      },
-                      onLongPress: () {
-                        _unfocusAll();
-                        _editQuickPrice(qp);
-                      },
-                      child: AnimatedContainer(
-                        duration: AppAnimations.fast,
-                        curve: AppAnimations.smoothIn,
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                        decoration: BoxDecoration(
-                          color: isSelected ? AppTheme.albaikRichRed : AppTheme.albaikPureWhite,
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(
-                            color: isSelected ? AppTheme.albaikRichRed : Colors.grey.shade200, 
-                            width: isSelected ? 2 : 1,
+                    return ScalePress(
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(20),
+                        onTap: () {
+                          _unfocusAll();
+                          _costCtrl.text = displayPrice;
+                        },
+                        onLongPress: () {
+                          _unfocusAll();
+                          _editQuickPrice(qp);
+                        },
+                        child: AnimatedContainer(
+                          duration: AppAnimations.fast,
+                          curve: AppAnimations.smoothIn,
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                          decoration: BoxDecoration(
+                            color: isSelected ? AppTheme.albaikRichRed : AppTheme.albaikPureWhite,
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                              color: isSelected ? AppTheme.albaikRichRed : Colors.grey.shade200, 
+                              width: isSelected ? 2 : 1,
+                            ),
                           ),
-                        ),
-                        child: Text(
-                          displayPrice,
-                          style: TextStyle(
-                            fontWeight: FontWeight.w600, 
-                            color: isSelected ? AppTheme.albaikPureWhite : AppTheme.albaikDeepNavy,
+                          child: Text(
+                            displayPrice,
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600, 
+                              color: isSelected ? AppTheme.albaikPureWhite : AppTheme.albaikDeepNavy,
+                            ),
                           ),
                         ),
                       ),
@@ -783,138 +911,89 @@ class _IntakeTabState extends State<IntakeTab> {
                 
                 const SizedBox(height: 32),
 
-                InkWell(
-                  onTap: _takePicture,
-                  borderRadius: BorderRadius.circular(16),
-                  child: Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(vertical: 20),
-                    decoration: BoxDecoration(
-                      color: _deviceImageFile == null ? AppTheme.albaikPureWhite : AppTheme.albaikDeepNavy.withOpacity(0.05),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: AppTheme.albaikDeepNavy.withOpacity(0.3),
-                        width: 2,
-                        style: BorderStyle.solid,
+                ScalePress(
+                  child: InkWell(
+                    onTap: _takePicture,
+                    borderRadius: BorderRadius.circular(16),
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(vertical: 20),
+                      decoration: BoxDecoration(
+                        color: _deviceImageFile == null ? AppTheme.albaikPureWhite : AppTheme.albaikDeepNavy.withOpacity(0.05),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: AppTheme.albaikDeepNavy.withOpacity(0.3),
+                          width: 2,
+                          style: BorderStyle.solid,
+                        ),
                       ),
-                    ),
-                    child: Column(
-                      children: [
-                        Icon(
-                          _deviceImageFile == null ? Icons.camera_alt_outlined : Icons.check_circle_outline,
-                          size: 32,
-                          color: AppTheme.albaikDeepNavy.withOpacity(0.7),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          _deviceImageFile == null ? 'التقاط صورة لحالة الجهاز' : 'تم التقاط الصورة بنجاح (اضغط لتغييرها)',
-                          style: const TextStyle(
-                            color: AppTheme.albaikDeepNavy,
-                            fontWeight: FontWeight.w600,
+                      child: Column(
+                        children: [
+                          Icon(
+                            _deviceImageFile == null ? Icons.camera_alt_outlined : Icons.check_circle_outline,
+                            size: 32,
+                            color: AppTheme.albaikDeepNavy.withOpacity(0.7),
                           ),
-                        ),
-                      ],
+                          const SizedBox(height: 8),
+                          Text(
+                            _deviceImageFile == null ? 'التقاط صورة لحالة الجهاز' : 'تم التقاط الصورة بنجاح (اضغط لتغييرها)',
+                            style: const TextStyle(
+                              color: AppTheme.albaikDeepNavy,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
                 const SizedBox(height: 32),
 
-                ElevatedButton(
-                  onPressed: _saveTicket,
-                  child: const Text('حفظ وإصدار التذكرة'),
+                ScalePress(
+                  child: ElevatedButton(
+                    onPressed: _saveTicket,
+                    child: const Text('حفظ وإصدار الوصل'),
+                  ),
                 ),
-
-                if (_lastSavedTicket != null) ...[
-                  const SizedBox(height: 24),
-                  const Divider(),
-                  const SizedBox(height: 16),
-                  
-                  // أزرار الطباعة والمشاركة المستقلة لوصل الزبون
-                  Row(
-                    children: [
-                      Expanded(
-                        flex: 4,
-                        child: OutlinedButton.icon(
-                          onPressed: () => PrinterService.printWithFallbackDialog(
-                            context: context,
-                            ticket: _lastSavedTicket!,
-                            macAddress: settingsProvider.printerMac,
-                            isCustomerCopy: true,
-                          ),
-                          icon: const Icon(Icons.print, size: 16),
-                          label: const Text('طباعة وصل الزبون', style: TextStyle(fontSize: 12)),
-                          style: OutlinedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 8),
-                            side: const BorderSide(color: AppTheme.albaikDeepNavy),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        flex: 1,
-                        child: OutlinedButton(
-                          style: OutlinedButton.styleFrom(
-                            padding: EdgeInsets.zero,
-                            side: BorderSide(color: AppTheme.albaikDeepNavy.withValues(alpha: 0.5)),
-                          ),
-                          onPressed: () => PrinterService.generateAndShareReceiptDirectly(
-                            context: context,
-                            ticket: _lastSavedTicket!,
-                            isCustomerCopy: true,
-                          ),
-                          child: const Icon(Icons.share, color: AppTheme.albaikDeepNavy, size: 20),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  
-                  // أزرار الطباعة والمشاركة المستقلة لملصق الجهاز
-                  Row(
-                    children: [
-                      Expanded(
-                        flex: 4,
-                        child: OutlinedButton.icon(
-                          onPressed: () => PrinterService.printWithFallbackDialog(
-                            context: context,
-                            ticket: _lastSavedTicket!,
-                            macAddress: settingsProvider.printerMac,
-                            isCustomerCopy: false,
-                          ),
-                          icon: const Icon(Icons.label_outline, size: 16),
-                          label: const Text('طباعة ملصق الجهاز', style: TextStyle(fontSize: 12)),
-                          style: OutlinedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 8),
-                            foregroundColor: AppTheme.albaikRichRed,
-                            side: const BorderSide(color: AppTheme.albaikRichRed),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        flex: 1,
-                        child: OutlinedButton(
-                          style: OutlinedButton.styleFrom(
-                            padding: EdgeInsets.zero,
-                            side: BorderSide(color: AppTheme.albaikRichRed.withValues(alpha: 0.5)),
-                          ),
-                          onPressed: () => PrinterService.generateAndShareReceiptDirectly(
-                            context: context,
-                            ticket: _lastSavedTicket!,
-                            isCustomerCopy: false,
-                          ),
-                          child: const Icon(Icons.share, color: AppTheme.albaikRichRed, size: 20),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
 
                 const SizedBox(height: 24),
               ],
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class ScalePress extends StatefulWidget {
+  final Widget child;
+  const ScalePress({Key? key, required this.child}) : super(key: key);
+
+  @override
+  State<ScalePress> createState() => _ScalePressState();
+}
+
+class _ScalePressState extends State<ScalePress> {
+  bool _isPressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Listener(
+      onPointerDown: (_) {
+        if (mounted) setState(() => _isPressed = true);
+      },
+      onPointerUp: (_) {
+        if (mounted) setState(() => _isPressed = false);
+      },
+      onPointerCancel: (_) {
+        if (mounted) setState(() => _isPressed = false);
+      },
+      child: AnimatedScale(
+        scale: _isPressed ? 0.94 : 1.0,
+        duration: const Duration(milliseconds: 100),
+        curve: Curves.easeOutCubic,
+        child: widget.child,
       ),
     );
   }

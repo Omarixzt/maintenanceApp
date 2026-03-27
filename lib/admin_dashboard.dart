@@ -137,6 +137,52 @@ class _AdminDashboardState extends State<AdminDashboard> {
     }
   }
 
+  // الدالة الجديدة: التفعيل الجماعي لصلاحية جلب الأسعار
+  Future<void> _allowPriceSyncForAllShops() async {
+    setState(() => _isLoading = true);
+    
+    try {
+      // 1. جلب جميع المحلات (الاشتراكات) المسجلة في النظام
+      final subsSnapshot = await FirebaseFirestore.instance.collection('subscriptions').get();
+
+      // 2. استخدام Batch لكتابة التعديلات دفعة واحدة لتوفير استهلاك البيانات في فايربيس
+      final batch = FirebaseFirestore.instance.batch();
+
+      int count = 0;
+      for (var doc in subsSnapshot.docs) {
+        final shopId = doc.id; // كود المحل
+        final permissionRef = FirebaseFirestore.instance.collection('shop_permissions').doc(shopId);
+        
+        // تجهيز أمر التفعيل لكل محل
+        batch.set(permissionRef, {'allowPriceSync': true}, SetOptions(merge: true));
+        count++;
+      }
+
+      // 3. تنفيذ الدفعة
+      await batch.commit();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('تم تفعيل زر جلب الأسعار لـ $count محل بنجاح!'),
+            backgroundColor: Colors.green.shade700,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('حدث خطأ أثناء التفعيل الجماعي: $e'),
+            backgroundColor: Colors.red.shade700,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -230,6 +276,36 @@ class _AdminDashboardState extends State<AdminDashboard> {
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF1E293B),
                     foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+              ),
+
+              // --- الإضافة الجديدة: قسم إدارة الصلاحيات ---
+              const SizedBox(height: 24),
+              Divider(color: Colors.grey.shade300, thickness: 1),
+              const SizedBox(height: 24),
+
+              const Text(
+                'إدارة صلاحيات المحلات', 
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)
+              ),
+              const SizedBox(height: 12),
+              
+              SizedBox(
+                width: double.infinity,
+                height: 55,
+                child: OutlinedButton.icon(
+                  onPressed: _isLoading ? null : _allowPriceSyncForAllShops,
+                  icon: _isLoading 
+                      ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Icon(Icons.cloud_sync, color: Colors.blue),
+                  label: const Text(
+                    'السماح لجميع المحلات بجلب الأسعار', 
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.blue)
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: Colors.blue, width: 2),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
                 ),

@@ -1,3 +1,4 @@
+import 'dart:async'; 
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
@@ -8,9 +9,11 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart'; 
+import 'package:cloud_firestore/cloud_firestore.dart'; 
+import 'package:isar/isar.dart';
 import '../models/app_models.dart';
 import '../services/isar_service.dart';
-import 'package:isar/isar.dart';
 
 class SettingsProvider extends ChangeNotifier {
   String telegramBotToken = '';
@@ -20,10 +23,57 @@ class SettingsProvider extends ChangeNotifier {
   bool autoCleanupEnabled = false;
   int autoCleanupDays = 90;
 
+  // ==========================================
+  // متغيرات نظام الصلاحيات السحابية
+  // ==========================================
+  bool allowPriceSync = false;
+  StreamSubscription<DocumentSnapshot>? _permissionSub;
+
   SettingsProvider() {
     _loadSettings();
+    _listenToShopPermissions(); 
   }
 
+  // ==========================================
+  // دوال الصلاحيات (Feature Flags)
+  // ==========================================
+  void _listenToShopPermissions() async {
+    String? shopId = await IsarService.getSetting('active_shop_id');
+    if (shopId == null || shopId.isEmpty) return;
+
+    _permissionSub?.cancel();
+    _permissionSub = FirebaseFirestore.instance
+        .collection('shop_permissions')
+        .doc(shopId)
+        .snapshots()
+        .listen((snapshot) {
+      if (snapshot.exists) {
+        allowPriceSync = snapshot.data()?['allowPriceSync'] ?? false;
+        notifyListeners(); 
+      }
+    });
+  }
+
+  Future<void> consumePriceSyncPermission() async {
+    String? shopId = await IsarService.getSetting('active_shop_id');
+    if (shopId == null) return;
+
+    allowPriceSync = false;
+    notifyListeners();
+
+    try {
+      await FirebaseFirestore.instance
+          .collection('shop_permissions')
+          .doc(shopId)
+          .set({'allowPriceSync': false}, SetOptions(merge: true));
+    } catch (e) {
+      debugPrint("خطأ في تحديث الصلاحية: $e");
+    }
+  }
+
+  // ==========================================
+  // دوال الإعدادات والتنظيف 
+  // ==========================================
   Future<void> _loadSettings() async {
     telegramBotToken = await IsarService.getSetting('bot_token') ?? '';
     telegramChatId = await IsarService.getSetting('chat_id') ?? '';
@@ -102,7 +152,9 @@ class SettingsProvider extends ChangeNotifier {
     return deletedCount;
   }
 
-  // توليد تقرير PDF احترافي ومنسق
+  // ==========================================
+  // تصميم التقرير الشهري (PDF)
+  // ==========================================
   Future<Uint8List> generateMonthlyReportPdf(int targetMonth, int targetYear) async {
     String? shopId = await IsarService.getSetting('active_shop_id');
     String shopName = await IsarService.getSetting('store_name') ?? 'صيانة البيك';
@@ -128,18 +180,21 @@ class SettingsProvider extends ChangeNotifier {
 
     final pdf = pw.Document();
     
-    // تحميل الخطوط العربية المخصصة (تأكد من وجودها في assets/fonts)
     pw.Font arabicFont;
     pw.Font arabicFontBold;
     try {
-      final fontData = await rootBundle.load("assets/fonts/Cairo-Regular.ttf");
-      arabicFont = pw.Font.ttf(fontData);
-      final fontDataBold = await rootBundle.load("assets/fonts/Cairo-Bold.ttf");
-      arabicFontBold = pw.Font.ttf(fontDataBold);
+      arabicFont = await PdfGoogleFonts.cairoRegular();
+      arabicFontBold = await PdfGoogleFonts.cairoBold();
     } catch (e) {
-      // في حال عدم وجود الخط، استخدام خط افتراضي لتجنب انهيار التطبيق
-      arabicFont = pw.Font.helvetica();
-      arabicFontBold = pw.Font.helveticaBold();
+      try {
+        final fontData = await rootBundle.load("assets/fonts/Cairo-Regular.ttf");
+        arabicFont = pw.Font.ttf(fontData);
+        final fontDataBold = await rootBundle.load("assets/fonts/Cairo-Bold.ttf");
+        arabicFontBold = pw.Font.ttf(fontDataBold);
+      } catch (_) {
+        arabicFont = pw.Font.helvetica();
+        arabicFontBold = pw.Font.helveticaBold();
+      }
     }
 
     String reportDateStr = '$targetMonth / $targetYear';
@@ -148,87 +203,101 @@ class SettingsProvider extends ChangeNotifier {
       pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
         margin: const pw.EdgeInsets.all(32),
-        textDirection: pw.TextDirection.rtl, // تحديد اتجاه النص للعربية
+        textDirection: pw.TextDirection.rtl, 
         theme: pw.ThemeData.withFont(base: arabicFont, bold: arabicFontBold),
         header: (context) => pw.Column(
           crossAxisAlignment: pw.CrossAxisAlignment.center,
           children: [
-            pw.Text(shopName, style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold)),
+            pw.Text(shopName, style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold), textDirection: pw.TextDirection.rtl),
             pw.SizedBox(height: 4),
-            pw.Text('التقرير الشهري المالي والتشغيلي', style: const pw.TextStyle(fontSize: 18, color: PdfColors.grey700)),
+            pw.Text('التقرير الشهري لقسم الصيانة', style: const pw.TextStyle(fontSize: 18, color: PdfColors.grey700), textDirection: pw.TextDirection.rtl),
             pw.SizedBox(height: 4),
-            pw.Text('عن شهر: $reportDateStr', style: const pw.TextStyle(fontSize: 14, color: PdfColors.grey600)),
+            pw.Directionality(
+              textDirection: pw.TextDirection.rtl,
+              child: pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.center,
+                children: [
+                  pw.Text('تقرير شهر: ', style: const pw.TextStyle(fontSize: 14, color: PdfColors.grey600)),
+                  pw.Text(reportDateStr, style: const pw.TextStyle(fontSize: 14, color: PdfColors.grey600), textDirection: pw.TextDirection.ltr),
+                ]
+              ),
+            ),
+            pw.SizedBox(height: 8),
             pw.Divider(thickness: 2, color: PdfColors.blueGrey900),
             pw.SizedBox(height: 20),
           ]
         ),
-        footer: (context) => pw.Container(
-          alignment: pw.Alignment.center,
-          margin: const pw.EdgeInsets.only(top: 10),
-          child: pw.Text('صفحة ${context.pageNumber} من ${context.pagesCount} - تم توليد التقرير بواسطة النظام', style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey)),
+        footer: (context) => pw.Directionality(
+          textDirection: pw.TextDirection.rtl,
+          child: pw.Container(
+            alignment: pw.Alignment.center,
+            margin: const pw.EdgeInsets.only(top: 10),
+            child: pw.Text('صفحة ${context.pageNumber} من ${context.pagesCount} - تم توليد التقرير بواسطة نظام الصيانة', style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey)),
+          ),
         ),
         build: (context) => [
-          // الملصقات الإحصائية (Summary)
-          pw.Row(
-            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-            children: [
-              _buildSummaryBox('إجمالي الأجهزة', '${targetTickets.length}', PdfColors.blueGrey800),
-              _buildSummaryBox('الإيرادات (د.أ)', totalRevenue.toStringAsFixed(2), PdfColors.blue800),
-              _buildSummaryBox('صافي الربح (د.أ)', totalProfit.toStringAsFixed(2), PdfColors.green800),
-            ]
+          // إجمالي المبالغ كسطر نصي بدلاً من المربعات
+          pw.Directionality(
+            textDirection: pw.TextDirection.rtl,
+            child: pw.Container(
+              margin: const pw.EdgeInsets.only(bottom: 20),
+              padding: const pw.EdgeInsets.all(12),
+              decoration: pw.BoxDecoration(
+                color: PdfColors.grey100,
+                borderRadius: const pw.BorderRadius.all(pw.Radius.circular(8)),
+                border: pw.Border.all(color: PdfColors.grey300),
+              ),
+              child: pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceAround,
+                children: [
+                  pw.Text('إجمالي الأجهزة: ${targetTickets.length}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                  pw.Text('إجمالي الإيرادات: ${totalRevenue.toStringAsFixed(2)} د.أ', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.blue800)),
+                  pw.Text('صافي الأرباح: ${totalProfit.toStringAsFixed(2)} د.أ', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.green800)),
+                ]
+              )
+            )
           ),
-          pw.SizedBox(height: 30),
           
           // جدول التذاكر
-          pw.TableHelper.fromTextArray(
-            headers: ['رقم', 'تاريخ الاستلام', 'العميل', 'الموديل', 'الحالة', 'الإيراد', 'الربح'],
-            data: targetTickets.asMap().entries.map((entry) {
-              int idx = entry.key + 1;
-              var t = entry.value;
-              String dateOnly = t.receivedDate.length >= 10 ? t.receivedDate.substring(0, 10) : t.receivedDate;
-              return [
-                idx.toString(),
-                dateOnly,
-                t.customerName,
-                t.deviceModel,
-                t.status == 'Delivered' ? 'سلم' : t.status,
-                t.finalCost.toString(),
-                t.netProfit.toString(),
-              ];
-            }).toList(),
-            border: pw.TableBorder.all(color: PdfColors.grey300, width: 1),
-            headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white, fontSize: 10),
-            headerDecoration: const pw.BoxDecoration(color: PdfColors.blueGrey800),
-            cellStyle: const pw.TextStyle(fontSize: 10),
-            cellAlignment: pw.Alignment.center,
-            cellPadding: const pw.EdgeInsets.all(6),
-            oddRowDecoration: const pw.BoxDecoration(color: PdfColors.grey100),
+          pw.Directionality(
+            textDirection: pw.TextDirection.rtl,
+            child: pw.TableHelper.fromTextArray(
+              headers: ['الربح', 'الإيراد', 'الحالة', 'النوع والموديل', 'العميل', 'تاريخ الاستلام', 'رقم'],
+              data: targetTickets.asMap().entries.map((entry) {
+                int idx = entry.key + 1;
+                var t = entry.value;
+                String dateOnly = t.receivedDate.length >= 10 ? t.receivedDate.substring(0, 10) : t.receivedDate;
+                
+                String statusAr = t.status;
+                if (t.status == 'Delivered') statusAr = 'تم التسليم';
+                if (t.status == 'Ready') statusAr = 'جاهز';
+                if (t.status == 'Waiting') statusAr = 'انتظار';
+                if (t.status == 'In Progress') statusAr = 'جاري العمل';
+
+                return [
+                  t.netProfit.toString(),
+                  t.finalCost.toString(),
+                  statusAr,
+                  '${t.deviceType} ${t.deviceModel}', 
+                  t.customerName,
+                  dateOnly,
+                  idx.toString(),
+                ];
+              }).toList(),
+              border: pw.TableBorder.all(color: PdfColors.grey300, width: 1),
+              headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white, fontSize: 11),
+              headerDecoration: const pw.BoxDecoration(color: PdfColors.blueGrey800),
+              cellStyle: const pw.TextStyle(fontSize: 10),
+              cellAlignment: pw.Alignment.centerRight, 
+              cellPadding: const pw.EdgeInsets.all(6),
+              oddRowDecoration: const pw.BoxDecoration(color: PdfColors.grey100),
+            ),
           ),
         ],
       ),
     );
 
     return await pdf.save();
-  }
-
-  pw.Widget _buildSummaryBox(String title, String value, PdfColor color) {
-    return pw.Container(
-      width: 140,
-      padding: const pw.EdgeInsets.all(12),
-      decoration: pw.BoxDecoration(
-        color: PdfColor(color.red, color.green, color.blue, 0.1),
-        border: pw.Border.all(color: color, width: 1.5),
-        borderRadius: const pw.BorderRadius.all(pw.Radius.circular(8)),
-      ),
-      child: pw.Column(
-        crossAxisAlignment: pw.CrossAxisAlignment.center,
-        children: [
-          pw.Text(title, style: pw.TextStyle(fontSize: 12, color: color, fontWeight: pw.FontWeight.bold)),
-          pw.SizedBox(height: 4),
-          pw.Text(value, style: pw.TextStyle(fontSize: 18, color: color, fontWeight: pw.FontWeight.bold)),
-        ]
-      )
-    );
   }
 
   // حفظ التقرير في الجهاز ومشاركته
@@ -261,5 +330,11 @@ class SettingsProvider extends ChangeNotifier {
       debugPrint('خطأ في إرسال تيليجرام: $e');
       return false;
     }
+  }
+
+  @override
+  void dispose() {
+    _permissionSub?.cancel(); 
+    super.dispose();
   }
 }

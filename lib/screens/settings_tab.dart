@@ -293,14 +293,25 @@ class _SettingsTabState extends State<SettingsTab> {
                     ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) 
                     : const Icon(Icons.cloud_download),
                 label: const Text('جلب أحدث أسعار الشاشات من السحابة'),
-                onPressed: _isSyncingPrices ? null : () async {
+                
+                // التعديل هنا: الزر يعمل فقط إذا كانت الصلاحية (allowPriceSync) مفعلة وغير قيد التحميل
+                onPressed: (provider.allowPriceSync && !_isSyncingPrices) ? () async {
                   _unfocusAll();
                   setState(() => _isSyncingPrices = true);
+                  
                   final inventoryProvider = Provider.of<InventoryProvider>(context, listen: false);
-                  final resultMessage = await inventoryProvider.syncPricesFromCloud();
-                  setState(() => _isSyncingPrices = false);
-                  _showMessage(resultMessage);
-                },
+                  
+                  // تنفيذ عملية الجلب
+                  final resultMessage = await inventoryProvider.syncPricesFromCloud(); 
+                  
+                  // إطفاء الصلاحية فوراً بعد الاستخدام ليصبح الزر رمادياً مرة أخرى
+                  await provider.consumePriceSyncPermission();
+                  
+                  if (mounted) {
+                    setState(() => _isSyncingPrices = false);
+                    _showMessage(resultMessage);
+                  }
+                } : null, // تمرير null يجعل الزر رمادياً وغير قابل للضغط
               ),
               const SizedBox(height: 32),
               Divider(color: Colors.grey.shade300, thickness: 1),

@@ -1,11 +1,12 @@
 import 'dart:io';
+import 'dart:async'; // <-- تم إضافة هذه المكتبة
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import 'package:isar/isar.dart';
 import '../models/app_models.dart';
 import '../services/isar_service.dart';
-import '../providers/ticket_provider.dart'; // <-- استيراد مزود التذاكر
+import '../providers/ticket_provider.dart';
 import '../theme/custom_app_bar.dart';
 import '../theme/app_theme.dart';
 
@@ -21,16 +22,36 @@ class _ArchiveTabState extends State<ArchiveTab> {
   DateTime? _selectedFilterDate; 
   List<MaintenanceTicket> _archivedTickets = [];
   bool _isLoading = true;
-  bool _isSyncing = false; // <-- متغير لحالة المزامنة
+  bool _isSyncing = false; 
+  
+  // <-- متغير المستمع لمراقبة قاعدة البيانات
+  StreamSubscription<void>? _dbSubscription; 
 
   @override
   void initState() {
     super.initState();
     _loadArchivedTickets();
+    
+    // <-- التعديل الجوهري: الاستماع لأي تغيير في السجل محلياً وتحديث الواجهة فوراً
+    _dbSubscription = IsarService.db.maintenanceTickets
+        .filter()
+        .isArchivedEqualTo(true)
+        .watchLazy()
+        .listen((_) {
+      if (mounted) {
+        _loadArchivedTickets();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    // إغلاق المستمع عند الخروج من الشاشة لمنع تسرب الذاكرة
+    _dbSubscription?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadArchivedTickets() async {
-    // تم تصحيح هذا السطر بإزالة await لأن db ليس Future
     final isar = IsarService.db;
     final tickets = await isar.maintenanceTickets
         .filter()
@@ -44,7 +65,6 @@ class _ArchiveTabState extends State<ArchiveTab> {
     });
   }
 
-  // دالة المزامنة من السحابة
   Future<void> _syncArchiveFromCloud() async {
     setState(() {
       _isSyncing = true;
@@ -53,7 +73,8 @@ class _ArchiveTabState extends State<ArchiveTab> {
     final provider = Provider.of<TicketProvider>(context, listen: false);
     final resultMessage = await provider.syncNewArchivedTickets();
     
-    await _loadArchivedTickets();
+    // دالة _loadArchivedTickets ستعمل تلقائياً بفضل المستمع، لكن نضعها للتأكيد
+    await _loadArchivedTickets(); 
     
     setState(() {
       _isSyncing = false;
@@ -240,7 +261,6 @@ class _ArchiveTabState extends State<ArchiveTab> {
   @override
   Widget build(BuildContext context) {
     final results = _archivedTickets.where((t) {
-      // 1. التصفية حسب نص البحث
       bool matchesSearch = true;
       if (_searchQuery.isNotEmpty) {
         final query = _searchQuery.toLowerCase();
@@ -250,7 +270,6 @@ class _ArchiveTabState extends State<ArchiveTab> {
                t.imei.contains(query);
       }
 
-      // 2. التصفية حسب التاريخ المحدد (إن وجد)
       bool matchesDate = true;
       if (_selectedFilterDate != null) {
         String tDate = "";
@@ -266,7 +285,6 @@ class _ArchiveTabState extends State<ArchiveTab> {
       return matchesSearch && matchesDate;
     }).toList();
 
-    // تجميع التذاكر حسب التاريخ
     Map<String, List<MaintenanceTicket>> groupedTickets = {};
     for (var t in results) {
       String dateKey = "";
@@ -281,7 +299,6 @@ class _ArchiveTabState extends State<ArchiveTab> {
       groupedTickets[dateKey]!.add(t);
     }
 
-    // ترتيب التواريخ تنازلياً (من الأحدث إلى الأقدم)
     List<String> sortedDates = groupedTickets.keys.toList();
     sortedDates.sort((a, b) => b.compareTo(a));
 
@@ -296,7 +313,6 @@ class _ArchiveTabState extends State<ArchiveTab> {
               padding: const EdgeInsets.all(16.0),
               child: Row(
                 children: [
-                  // شريط البحث يأخذ المساحة الأكبر ويظهر أولاً
                   Expanded(
                     child: SizedBox(
                       height: 52,
@@ -318,7 +334,6 @@ class _ArchiveTabState extends State<ArchiveTab> {
                   ),
                   const SizedBox(width: 8),
                   
-                  // زر التقويم
                   AnimatedContainer(
                     duration: const Duration(milliseconds: 300),
                     height: 52, 
@@ -369,7 +384,6 @@ class _ArchiveTabState extends State<ArchiveTab> {
                   ),
                   
                   const SizedBox(width: 8),
-                  // الزر الجديد: زر مزامنة الأرشيف السحابي
                   Container(
                     height: 52,
                     width: 52,

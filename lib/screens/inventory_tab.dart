@@ -47,7 +47,6 @@ class _InventoryTabState extends State<InventoryTab> {
 
   void _unfocusAll() => FocusManager.instance.primaryFocus?.unfocus();
 
-  // دالة واحدة تدير الإضافة والتعديل بناءً على وجود القطعة
   void _showPartFormDialog(BuildContext context, InventoryProvider provider, {LocalPart? existingPart}) {
     final isEditMode = existingPart != null;
 
@@ -243,21 +242,66 @@ class _InventoryTabState extends State<InventoryTab> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Expanded(
-                                flex: 2,
                                 child: TextFormField(
                                   controller: _costCtrl,
                                   keyboardType: TextInputType.number,
-                                  decoration: const InputDecoration(labelText: 'سعر التكلفة', prefixIcon: Icon(Icons.attach_money)),
+                                  decoration: const InputDecoration(labelText: 'التكلفة', prefixIcon: Icon(Icons.attach_money)),
                                   validator: (val) => val!.isEmpty ? '*' : null,
                                 ),
                               ),
                               const SizedBox(width: 12),
                               Expanded(
-                                flex: 1,
                                 child: TextFormField(
                                   controller: _qtyCtrl,
                                   keyboardType: TextInputType.number,
-                                  decoration: const InputDecoration(labelText: 'الكمية', prefixIcon: Icon(Icons.numbers)),
+                                  textAlign: TextAlign.center,
+                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                                  decoration: InputDecoration(
+                                    labelText: 'الكمية',
+                                    contentPadding: const EdgeInsets.symmetric(vertical: 16, horizontal: 0), // تقليل الهوامش الداخلية لراحة الأزرار
+                                    prefixIcon: IconButton(
+                                      icon: const Icon(Icons.remove_circle_outline, color: AppTheme.albaikRichRed),
+                                      onPressed: () async {
+                                        _unfocusAll();
+                                        int currentQty = int.tryParse(_qtyCtrl.text) ?? 0;
+                                        if (currentQty > 1) {
+                                          setSheetState(() => _qtyCtrl.text = (currentQty - 1).toString());
+                                        } else if (currentQty <= 1 && isEditMode) {
+                                          bool? confirmDelete = await showDialog<bool>(
+                                            context: context,
+                                            builder: (deleteCtx) => AlertDialog(
+                                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                                              title: const Text('نفاد الكمية', style: TextStyle(color: AppTheme.albaikRichRed, fontWeight: FontWeight.bold)),
+                                              content: const Text('وصول الكمية إلى 0 يعني نفاد القطعة. هل تريد حذفها من المخزون بشكل نهائي؟'),
+                                              actions: [
+                                                TextButton(onPressed: () => Navigator.pop(deleteCtx, false), child: const Text('إلغاء')),
+                                                ElevatedButton(
+                                                  style: ElevatedButton.styleFrom(backgroundColor: AppTheme.albaikRichRed),
+                                                  onPressed: () => Navigator.pop(deleteCtx, true),
+                                                  child: const Text('حذف نهائي'),
+                                                ),
+                                              ],
+                                            ),
+                                          );
+                                          if (confirmDelete == true) {
+                                            provider.deleteInventoryPart(existingPart!);
+                                            if (ctx.mounted) Navigator.pop(ctx);
+                                            if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم حذف القطعة من المخزون')));
+                                          }
+                                        } else if (currentQty <= 1 && !isEditMode) {
+                                          if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('لا يمكن أن تكون الكمية أقل من 1 عند الإضافة')));
+                                        }
+                                      },
+                                    ),
+                                    suffixIcon: IconButton(
+                                      icon: Icon(Icons.add_circle_outline, color: Colors.green.shade700),
+                                      onPressed: () {
+                                        _unfocusAll();
+                                        int currentQty = int.tryParse(_qtyCtrl.text) ?? 0;
+                                        setSheetState(() => _qtyCtrl.text = (currentQty + 1).toString());
+                                      },
+                                    ),
+                                  ),
                                   validator: (val) => val!.isEmpty ? '*' : null,
                                 ),
                               ),
@@ -317,7 +361,6 @@ class _InventoryTabState extends State<InventoryTab> {
       appBar: const CustomAppBar(title: 'إدارة المخزون المحلي'),
       body: Column(
         children: [
-          // شريط المزامنة ومعلومات المخزون
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             color: AppTheme.albaikDeepNavy.withValues(alpha: 0.02),
@@ -363,7 +406,7 @@ class _InventoryTabState extends State<InventoryTab> {
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: Colors.grey.shade200)),
                         child: InkWell(
                           borderRadius: BorderRadius.circular(16),
-                          onTap: () => _showPartFormDialog(context, provider, existingPart: part), // التعديل والتمرير هنا
+                          onTap: () => _showPartFormDialog(context, provider, existingPart: part), 
                           child: ListTile(
                             contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                             leading: CircleAvatar(
@@ -406,13 +449,12 @@ class _InventoryTabState extends State<InventoryTab> {
         ],
       ),
       floatingActionButton: AnimatedFab(
-        onPressed: () => _showPartFormDialog(context, provider), // إضافة قطعة جديدة
+        onPressed: () => _showPartFormDialog(context, provider), 
       ),
     );
   }
 }
 
-// زر مخصص يحتوي على حركة تصغير وتكبير
 class AnimatedFab extends StatefulWidget {
   final VoidCallback onPressed;
   const AnimatedFab({Key? key, required this.onPressed}) : super(key: key);

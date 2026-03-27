@@ -62,6 +62,133 @@ class _WorkspaceTabState extends State<WorkspaceTab> {
     );
   }
 
+  // النافذة المنبثقة الجديدة لخيارات الطباعة والمشاركة
+  void _showPrintOptionsDialog(BuildContext context, MaintenanceTicket ticket) {
+    final settingsProvider = Provider.of<SettingsProvider>(context, listen: false);
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Row(
+          children: [
+            Icon(Icons.print, color: AppTheme.albaikDeepNavy),
+            SizedBox(width: 10),
+            Text('الطباعة والمشاركة', style: TextStyle(color: AppTheme.albaikDeepNavy, fontWeight: FontWeight.bold, fontSize: 18)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // قسم وصل الزبون
+            const Text('وصل الزبون', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.albaikDeepNavy, fontSize: 14)),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      Navigator.pop(ctx); // إغلاق النافذة
+                      PrinterService.printWithFallbackDialog(
+                        context: context,
+                        ticket: ticket,
+                        macAddress: settingsProvider.printerMac,
+                        isCustomerCopy: true,
+                      );
+                    },
+                    icon: const Icon(Icons.print, size: 18),
+                    label: const Text('طباعة'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.albaikDeepNavy,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      Navigator.pop(ctx); // إغلاق النافذة
+                      PrinterService.generateAndShareReceiptDirectly(
+                        context: context,
+                        ticket: ticket,
+                        isCustomerCopy: true,
+                      );
+                    },
+                    icon: const Icon(Icons.share, size: 18),
+                    label: const Text('مشاركة'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppTheme.albaikDeepNavy,
+                      side: const BorderSide(color: AppTheme.albaikDeepNavy, width: 1.5),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 16),
+              child: Divider(height: 1, color: Colors.black12),
+            ),
+            
+            // قسم ملصق المحل
+            const Text('ملصق المحل', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.albaikRichRed, fontSize: 14)),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      PrinterService.printWithFallbackDialog(
+                        context: context,
+                        ticket: ticket,
+                        macAddress: settingsProvider.printerMac,
+                        isCustomerCopy: false,
+                      );
+                    },
+                    icon: const Icon(Icons.print, size: 18),
+                    label: const Text('طباعة'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.albaikRichRed,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      PrinterService.generateAndShareReceiptDirectly(
+                        context: context,
+                        ticket: ticket,
+                        isCustomerCopy: false,
+                      );
+                    },
+                    icon: const Icon(Icons.share, size: 18),
+                    label: const Text('مشاركة'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppTheme.albaikRichRed,
+                      side: const BorderSide(color: AppTheme.albaikRichRed, width: 1.5),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _promptForArchiveDetails(BuildContext context, TicketProvider provider, MaintenanceTicket ticket, String newStatus) async {
     final finalCostCtrl = TextEditingController(text: ticket.expectedCost.toString());
     final partsCostCtrl = TextEditingController(text: '0');
@@ -198,20 +325,46 @@ class _WorkspaceTabState extends State<WorkspaceTab> {
                 ),
               ),
 
+              // الأزرار الجديدة داخل النافذة
               Padding(
                 padding: const EdgeInsets.all(20.0),
-                child: OutlinedButton.icon(
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: AppTheme.albaikRichRed,
-                    side: const BorderSide(color: AppTheme.albaikRichRed, width: 2),
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                  ),
-                  icon: const Icon(Icons.archive),
-                  label: const Text('نقل الجهاز إلى الأرشيف'),
-                  onPressed: () {
-                    Navigator.pop(ctx);
-                    _promptForArchiveDetails(context, provider, ticket, ticket.status);
-                  },
+                child: Column(
+                  children: [
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppTheme.albaikDeepNavy,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                        ),
+                        icon: const Icon(Icons.print_outlined),
+                        label: const Text('طباعة / مشاركة الوصل', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                        onPressed: () {
+                          // فتح نافذة الطباعة دون إغلاق تفاصيل الجهاز
+                          _showPrintOptionsDialog(context, ticket);
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppTheme.albaikRichRed,
+                          side: const BorderSide(color: AppTheme.albaikRichRed, width: 2),
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                        ),
+                        icon: const Icon(Icons.archive),
+                        label: const Text('نقل الجهاز إلى الأرشيف', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                        onPressed: () {
+                          Navigator.pop(ctx);
+                          _promptForArchiveDetails(context, provider, ticket, ticket.status);
+                        },
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
@@ -353,7 +506,6 @@ class _WorkspaceTabState extends State<WorkspaceTab> {
   @override
   Widget build(BuildContext context) {
     final provider = Provider.of<TicketProvider>(context);
-    final settingsProvider = Provider.of<SettingsProvider>(context, listen: false);
     
     final filteredTickets = provider.tickets.where((t) {
       final query = _searchQuery.toLowerCase();
@@ -496,91 +648,6 @@ class _WorkspaceTabState extends State<WorkspaceTab> {
                                       ],
                                     ),
                                   ],
-
-                                  const SizedBox(height: 16),
-                                  const Divider(height: 1),
-                                  const SizedBox(height: 12),
-                                  
-                                  // --- أزرار الطباعة والمشاركة المستقلة لوصل الزبون ---
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                        flex: 4,
-                                        child: OutlinedButton.icon(
-                                          onPressed: () => PrinterService.printWithFallbackDialog(
-                                            context: context,
-                                            ticket: ticket,
-                                            macAddress: settingsProvider.printerMac,
-                                            isCustomerCopy: true,
-                                          ),
-                                          icon: const Icon(Icons.print, size: 16),
-                                          label: const Text('طباعة وصل الزبون', style: TextStyle(fontSize: 12)),
-                                          style: OutlinedButton.styleFrom(
-                                            padding: const EdgeInsets.symmetric(vertical: 8),
-                                            side: const BorderSide(color: AppTheme.albaikDeepNavy),
-                                          ),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Expanded(
-                                        flex: 1,
-                                        child: OutlinedButton(
-                                          style: OutlinedButton.styleFrom(
-                                            padding: EdgeInsets.zero,
-                                            side: BorderSide(color: AppTheme.albaikDeepNavy.withValues(alpha: 0.5)),
-                                          ),
-                                          onPressed: () => PrinterService.generateAndShareReceiptDirectly(
-                                            context: context,
-                                            ticket: ticket,
-                                            isCustomerCopy: true,
-                                          ),
-                                          child: const Icon(Icons.share, color: AppTheme.albaikDeepNavy, size: 20),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 8),
-                                  
-                                  // --- أزرار الطباعة والمشاركة المستقلة لملصق الجهاز ---
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                        flex: 4,
-                                        child: OutlinedButton.icon(
-                                          onPressed: () => PrinterService.printWithFallbackDialog(
-                                            context: context,
-                                            ticket: ticket,
-                                            macAddress: settingsProvider.printerMac,
-                                            isCustomerCopy: false,
-                                          ),
-                                          icon: const Icon(Icons.label_outline, size: 16),
-                                          label: const Text('طباعة ملصق الجهاز', style: TextStyle(fontSize: 12)),
-                                          style: OutlinedButton.styleFrom(
-                                            padding: const EdgeInsets.symmetric(vertical: 8),
-                                            foregroundColor: AppTheme.albaikRichRed,
-                                            side: const BorderSide(color: AppTheme.albaikRichRed),
-                                          ),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Expanded(
-                                        flex: 1,
-                                        child: OutlinedButton(
-                                          style: OutlinedButton.styleFrom(
-                                            padding: EdgeInsets.zero,
-                                            side: BorderSide(color: AppTheme.albaikRichRed.withValues(alpha: 0.5)),
-                                          ),
-                                          onPressed: () => PrinterService.generateAndShareReceiptDirectly(
-                                            context: context,
-                                            ticket: ticket,
-                                            isCustomerCopy: false,
-                                          ),
-                                          child: const Icon(Icons.share, color: AppTheme.albaikRichRed, size: 20),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-
                                 ],
                               ),
                             ),

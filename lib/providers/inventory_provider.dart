@@ -34,7 +34,7 @@ class InventoryProvider extends ChangeNotifier {
 
     quickPrices = await IsarService.db.quickPrices.where().sortByIndexId().findAll();
     if (quickPrices.isEmpty) {
-      final defaults = [3.0, 5.0, 7.0, 10.0, 15.0]; 
+      final defaults = [3.0, 5.0, 7.0, 8.0, 10.0]; 
       await IsarService.db.writeTxn(() async {
         for (int i = 0; i < defaults.length; i++) {
           final qp = QuickPrice()..indexId = i..price = defaults[i];
@@ -150,7 +150,7 @@ class InventoryProvider extends ChangeNotifier {
     return true;
   }
 
-  // --- الدالة الذكية للمزامنة (تم التحديث لتدعم SaaS) ---
+  // --- الدالة الذكية للمزامنة ---
   Future<String> syncInventoryWithCloud() async {
     try {
       String? shopId = await IsarService.getSetting('active_shop_id');
@@ -163,7 +163,11 @@ class InventoryProvider extends ChangeNotifier {
       int uploadedCount = 0;
       
       for (var part in pendingParts) {
-        if (part.partId == null || part.partId!.isEmpty) continue;
+        // توليد المعرف السحابي إذا كان مفقوداً
+        if (part.partId == null || part.partId!.isEmpty) {
+          part.partId = FirebaseFirestore.instance.collection('local_inventory').doc().id;
+        }
+        
         final docRef = FirebaseFirestore.instance.collection('local_inventory').doc(part.partId);
 
         if (part.isDeleted) {
@@ -313,16 +317,38 @@ class InventoryProvider extends ChangeNotifier {
         extractedBrands.add(DeviceBrand()..name = brandName..models = (modelsSet.toList()..sort()));
       });
 
-      await IsarService.db.writeTxn(() async {
-        await IsarService.db.supplierPrices.clear();
-        await IsarService.db.deviceBrands.clear();
-        await IsarService.db.supplierPrices.putAll(newPrices);
-        await IsarService.db.deviceBrands.putAll(extractedBrands);
+      final isar = IsarService.db;
+
+      await isar.writeTxn(() async {
+        // 1. مسح التسعيرات القديمة وإضافة الجديدة
+        await isar.supplierPrices.clear();
+        await isar.supplierPrices.putAll(newPrices);
+
+        // 2. تحديث الماركات بذكاء (تجنب Unique Index Violation)
+        for (var newBrand in extractedBrands) {
+          final existingBrand = await isar.deviceBrands.filter().nameEqualTo(newBrand.name).findFirst();
+          
+          if (existingBrand != null) {
+            // دمج الموديلات الموجودة مع الجديدة وإزالة التكرار
+            Set<String> combinedModels = existingBrand.models.toSet();
+            combinedModels.addAll(newBrand.models);
+            existingBrand.models = combinedModels.toList()..sort();
+            
+            // تحديث السجل الموجود
+            await isar.deviceBrands.put(existingBrand);
+          } else {
+            // إضافة السجل الجديد في حال لم يكن موجوداً
+            await isar.deviceBrands.put(newBrand);
+          }
+        }
       });
-      brands = extractedBrands;
+
+      brands = await isar.deviceBrands.where().findAll();
       await applyCustomBrandOrder();
-      return "تم جلب ${newPrices.length} تسعيرة بنجاح.";
+      
+      return "تم جلب ${newPrices.length} تسعيرة وتحديث الموديلات بنجاح.";
     } catch (e) {
+      debugPrint("Error syncing prices: $e");
       return "حدث خطأ: $e";
     }
   }
